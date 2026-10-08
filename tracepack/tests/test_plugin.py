@@ -61,7 +61,7 @@ class Contract18PluginRecall(_Env):
         for v in (DEMO_FACTS["before_p95"], DEMO_FACTS["after_p95"]):
             self.assertIn(v, res["text"])
         self.assertIn("Bash output", res["text"])
-        self.assertRegex(res["text"], r"line \d+")
+        self.assertRegex(res["text"], r" · L\d+")
         self.assertLessEqual(res["tokens"], res["budget"])
 
     def test_18b_only_out_of_context_records(self):

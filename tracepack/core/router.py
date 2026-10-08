@@ -257,12 +257,19 @@ class _IndexCache:
     def __init__(self):
         self._fp = None
         self._idx = None
+        self._ident = None
 
     def get(self, events: "Sequence[TraceEvent]") -> _Index:
+        # Fast path: the very same event objects as last time (the cached index holds them, so their
+        # ids cannot be recycled). Skips hashing the whole trace on repeated queries over one graph.
+        ident = (len(events), id(events[0]), id(events[len(events) // 2]), id(events[-1])) if events else None
+        if ident is not None and ident == self._ident and self._idx is not None:
+            return self._idx
         fp = _fingerprint(events)
         if fp != self._fp or self._idx is None:
             self._fp = fp
             self._idx = _Index(events)
+        self._ident = ident
         return self._idx
 
 
@@ -483,10 +490,13 @@ class DenseRouter:
         return out
 
     def _doc_vectors(self, index: _Index) -> "list[list[float]]":
+        if self._emb is not None and getattr(self, "_emb_index", None) is index:
+            return self._emb                     # the same cached index object: same texts
         fp = _fingerprint(index.events)
         if fp != self._emb_fp or self._emb is None:
             self._emb = self._embed(list(index.texts))
             self._emb_fp = fp
+        self._emb_index = index
         return self._emb
 
     def scores(self, query: str, graph) -> "tuple[list[str], list[float]]":

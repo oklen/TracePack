@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0 — 2026-10-08
+
+Recall is now measured on a public benchmark, and tuned so that it matches a BM25 search engine.
+
+- **Benchmark.** `tracepack bench codememo` runs a model-free evidence benchmark: CodeMemo, 153 questions
+  over 66 real Claude Code sessions. At 2,000 tokens, TracePack delivers the answer's turn for 34.6% of
+  questions and the exact value for 47%. Grep over the transcript gets 13.7% / 17%; the newest
+  context gets 3.9% / 12%. See the README.
+- **New defaults**, chosen on the odd-numbered questions and checked on the even-numbered ones:
+  - BM25 ranking; the BM25 + hashing hybrid was worse.
+  - No dependency closure; it cost evidence.
+  - Records packed whole, best first, until the budget is full, with a labelled excerpt for a top
+    record that doesn't fit. Before this, 8 records were ranked regardless of budget, so a larger
+    budget changed nothing.
+- **Records are not served twice.** A call carries its short output instead of repeating it, and a
+  tool output's label names its call.
+- **The budget holds for the whole answer.** Labels, header and footer now count against it, and all
+  token counts use one estimate (about 4 characters per token).
+- **Repeated recalls are about 4× faster.** The search index is kept between queries.
+- **Shorter labels:** `Bash output of \`pytest -q\` · 10-08 13:14 · L22`.
+- **README leads with the results.** First the compaction study's comparison with Codex (LongMemEval-S, 32k: +17.5 points;
+  research harness, not in this repository; table in `docs/RESEARCH.md`), then the CodeMemo recall benchmark.
+
 ## 0.2.0 — 2026-10-08
 
 TracePack becomes a Claude Code plugin.

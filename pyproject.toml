@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "TracePack"
-version = "0.2.0"
+version = "0.3.0"
 description = "Exact recall for coding agents after context compaction: verbatim, budgeted, labelled records from the session trace (Claude Code plugin, MCP server, CLI)"
 authors = [{ name = "Zefeng Cai" }]
 keywords = ["claude-code", "compaction", "context", "memory", "mcp", "agents", "transcript"]
@@ -52,6 +52,7 @@ packages = [
     "tracepack.examples",
     "tracepack.eval",
     "tracepack.profiler",
+    "tracepack.bench",
 ]
 
 [tool.setuptools.package-data]

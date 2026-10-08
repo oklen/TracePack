@@ -36,7 +36,13 @@ import time
 
 from tracepack import redact as R
 from tracepack.adapters.claude_code import ClaudeCodeAdapter
-from tracepack.core.assembler import AssemblerConfig, BudgetAssembler, estimate_text_tokens
+from tracepack.core.assembler import AssemblerConfig, BudgetAssembler
+
+
+def estimate_text_tokens(text: str) -> int:
+    """Tokens as the rest of TracePack counts them: about 4 characters per token (the adapters' estimate,
+    close to Claude's and GPT's tokenizers on English text and code)."""
+    return (len(text) + 3) // 4 if text else 0
 from tracepack.core.closure import ClosureConfig, TypedClosure
 from tracepack.core.graph import TraceGraph
 from tracepack.core.router import RouterConfig, make_router
@@ -46,6 +52,12 @@ DEFAULT_RECALL_BUDGET = 2000
 DEFAULT_INJECT_BUDGET = 1500
 DEFAULT_MAX_MB = 64
 DEFAULT_K = 8
+DEFAULT_ROUTER = "lexical"       # BM25; CodeMemo odd half: beats the BM25+hashing hybrid (34.6% vs 30.8%)
+DEFAULT_CLOSURE = "off"          # dependency closure cost evidence on CodeMemo (structured packer only)
+DEFAULT_PAIR = True              # a tool call comes with its output (and an output with its call)
+DEFAULT_EXCERPT = True           # a record too big for what is left is served as a labelled excerpt
+DEFAULT_PACKER = "greedy"        # whole records in rank order until the budget is full ("structured": closure packer)
+GREEDY_CANDIDATES = 300          # how deep the ranking goes when filling the budget
 MIN_BUDGET, MAX_BUDGET = 200, 12000
 INJECT_MAX_CHARS = 8000          # Claude Code moves additionalContext over 10,000 chars into a file
 RECENT_PAIRS = 3                 # after a compaction, the latest tool outputs are pinned in
@@ -300,6 +312,13 @@ def _when(ms: int) -> str:
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(ms / 1000.0))
 
 
+def _when_short(ms: int) -> str:
+    """`10-08 17:02`: the label repeats on every record, so it stays short."""
+    if not ms:
+        return ""
+    return time.strftime("%m-%d %H:%M", time.localtime(ms / 1000.0))
+
+
 def _line_of(event_id: str) -> str:
     parts = event_id.split(":")
     return str(int(parts[1])) if len(parts) >= 2 and parts[1].isdigit() else ""
@@ -335,26 +354,27 @@ def _label(graph, ev, changed_later: bool) -> str:
             "summary": "summary"}.get(ev.kind, ev.kind)
     tool = _tool_of(graph, ev)
     bits = [("%s %s" % (tool, kind)) if tool and ev.kind in ("tool_call", "tool_result") else kind]
-    w = _when(ev.timestamp)
+    w = _when_short(ev.timestamp)
     if w:
         bits.append(w)
     ln = _line_of(ev.event_id)
     if ln:
-        bits.append("line " + ln)
+        bits.append("L" + ln)
     if changed_later:
         bits.append("changed later")
     return " · ".join(bits)
 
 
-def _pack(sub, graph, query: str, seeds, budget: int, k: int):
-    """-> (entries, blocks, manifest, n_redacted) for seeds already chosen."""
-    seeds = _pair(seeds, sub)
-    closure = TypedClosure(ClosureConfig(mode="native")).close(query, seeds, sub, query_mode="lookup")
+def _pack(sub, graph, query: str, seeds, budget: int, k: int, closure_mode: str = "native",
+          pair: bool = True, excerpt: bool = True):
+    """-> (entries, blocks, manifest, n_redacted) for seeds already chosen, labels included in `budget`."""
+    if pair:
+        seeds = _pair(seeds, sub)
+    closure = TypedClosure(ClosureConfig(mode=closure_mode)).close(query, seeds, sub, query_mode="lookup")
     cfg = AssemblerConfig(repr_policy="source_only", pack="evidence_first", evidence_hops=2,
-                          evidence_share=0.5, cost_order=False, unit_cap_share=None, excerpt=True,
+                          evidence_share=0.5, cost_order=False, unit_cap_share=None, excerpt=excerpt,
                           separator=SEP)
-    inner = max(MIN_BUDGET // 2, budget - HEADER_ALLOWANCE * (k + 4))
-    packet = BudgetAssembler(cfg).assemble(query, closure, sub, inner, seeds=seeds, query_mode="lookup")
+    packet = BudgetAssembler(cfg).assemble(query, closure, sub, max(50, int(budget)), seeds=seeds, query_mode="lookup")
     m = packet.manifest
     parts = packet.context.split(SEP) if packet.context else []
     if len(parts) != len(m.entries):            # defensive: never mis-attribute provenance
@@ -375,6 +395,180 @@ def _pack(sub, graph, query: str, seeds, budget: int, k: int):
                         "line": _line_of(e.event_id), "tokens": e.token_cost, "reason": e.reason,
                         "excerpt": excerpt, "changed_later": changed})
     return entries, blocks, m, n_red
+
+
+def _fit(sub, graph, query: str, seeds, budget: int, k: int, closure_mode: str, render,
+         pair: bool = True, excerpt: bool = True):
+    """Pack, render with `render(entries, blocks, m, n_red) -> text`, and shrink the packer's budget until
+    the whole rendered answer (labels, header and footer included) is within `budget` tokens."""
+    inner = int(budget * 0.85)
+    best = None
+    for _ in range(6):
+        entries, blocks, m, n_red = _pack(sub, graph, query, seeds, inner, k, closure_mode, pair, excerpt)
+        text = render(entries, blocks, m, n_red)
+        tok = estimate_text_tokens(text)
+        best = (entries, blocks, m, n_red, text)
+        if tok <= budget or inner <= 50:
+            break
+        inner = max(50, int(inner * budget / float(tok) * 0.95))
+    entries, blocks, m, n_red, text = best
+    while entries and estimate_text_tokens(text) > budget:       # last resort: drop the last record
+        entries, blocks = entries[:-1], blocks[:-1]
+        text = render(entries, blocks, m, n_red)
+    return entries, blocks, m, n_red, text
+
+
+_STOP = frozenset("""a an and are as at be been but by can did do does done for from had has have how i if in into is
+it its it's me my no not of on or our out over so than that the their them then there these they this those to up
+us was we were what when where which who why will with would you your about after again all also any because before
+between both could each few further here just more most much only other own same should some such too under until
+very while""".split())
+_TERM = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./:\-]{2,}")
+
+
+def _terms(query: str):
+    return [w for w in (m.group(0).lower().strip(".:-/") for m in _TERM.finditer(query or "")) if w and w not in _STOP]
+
+
+def _excerpt(text: str, terms, max_tokens: int) -> str:
+    """The lines of `text` that mention the query's words (with one line of context), in order, `…` at gaps.
+    A single huge line is cut to a window around the first match."""
+    if max_tokens <= 0:
+        return ""
+    lines = (text or "").split("\n")
+    hits = [i for i, l in enumerate(lines) if any(w in l.lower() for w in terms)] or [0]
+    keep = sorted({j for i in hits for j in range(max(0, i - 1), min(len(lines), i + 2))})
+    out, used, prev = [], 0, None
+    for j in keep:
+        piece = lines[j]
+        if len(piece) > 600:
+            low = piece.lower()
+            pos = min([low.find(w) for w in terms if low.find(w) >= 0] or [0])
+            piece = ("…" if pos > 200 else "") + piece[max(0, pos - 200):pos + 400] + "…"
+        cost = estimate_text_tokens(piece) + 1
+        if used + cost > max_tokens:
+            break
+        if prev is not None and j != prev + 1:
+            out.append("…")
+        out.append(piece)
+        used += cost
+        prev = j
+    return "\n".join(out)
+
+
+def _call_hint(graph, ev) -> str:
+    """For a tool output: the call it answers, in a few words (`$ pytest -q`, `parse.py`)."""
+    for d in graph.parents(ev.event_id, "RESULT_OF"):
+        call = graph.event(d.dst_id)
+        tool = (call.meta or {}).get("tool", "")
+        txt = _pretty_call(tool, call.text or "")
+        if txt.startswith("$ "):
+            return "`%s`" % (txt[2:82] + ("…" if len(txt) > 82 else ""))
+        try:
+            args = json.loads((call.text or "")[len(tool) + 1:]) if tool else {}
+        except ValueError:
+            args = {}
+        for key in ("file_path", "path", "pattern", "url", "query", "notebook_path"):
+            if isinstance(args.get(key), str):
+                return "`%s`" % args[key][-80:]
+        return ""
+    return ""
+
+
+class _Greedy:
+    incomplete = False
+
+
+def _greedy(sub, graph, query: str, ranked_ids, budget: int, excerpt: bool = True, reserve: int = 70,
+            pinned=()):
+    """Fill `budget` with whole records in rank order, then excerpt the best-ranked records that did not fit.
+
+    A ranked tool call is served as the call (its content is often the answer: an Edit's new text, a
+    command) with a short output attached; a ranked tool output names its call in the label. `pinned`
+    records go first. -> (entries, blocks, state, n_redacted), blocks in the order the records happened."""
+    terms = _terms(query)
+    do_redact = R.enabled()
+    chosen, skipped, used, n_red = {}, [], 0, 0
+    state = _Greedy()
+    cap = budget - reserve
+
+    covered, hinted = set(), set()          # outputs already shown under their call; calls named in a label
+
+    def block_for(ev, attach=True):
+        tool = _tool_of(graph, ev)
+        changed = bool(graph.children(ev.event_id, "SUPERSEDES"))
+        label = _label(graph, ev, changed)
+        if ev.kind == "tool_result":
+            hint = _call_hint(graph, ev)
+            if hint:
+                label = label.replace("output", "output of " + hint, 1)
+            body = ev.text or ""
+        elif ev.kind == "tool_call":
+            body = _pretty_call(tool, ev.text or "")
+            outs = [d.src_id for d in sub.children(ev.event_id, "RESULT_OF")]
+            if outs and attach and outs[0] not in chosen:
+                out = sub.event(outs[0]).text or ""
+                if estimate_text_tokens(out) <= 40:
+                    body += "\n→ " + out.strip()
+                    return tool, changed, label, body, outs[0]
+        else:
+            body = ev.text or ""
+        return tool, changed, label, body, None
+
+    order = list(pinned) + [e for e in ranked_ids if e not in set(pinned)]
+    for eid in order:
+        if used >= cap - 30:
+            state.incomplete = True
+            break
+        if eid in chosen or eid in covered or eid not in sub:
+            continue
+        ev = sub.event(eid)
+        if ev.kind == "tool_call" and eid in hinted:
+            if (ev.meta or {}).get("tool", "") in ("Bash", "Read", "Grep", "Glob", "LS"):
+                continue                            # the output's label already names this call
+        tool, changed, label, body, folded = block_for(ev, attach=eid not in hinted)
+        cost = estimate_text_tokens("[99] " + label) + 2 + estimate_text_tokens(body)
+        if used + cost > cap:
+            state.incomplete = True
+            skipped.append(eid)
+            continue
+        if do_redact:
+            body, k = R.redact(body)
+            n_red += k
+        used += cost
+        chosen[eid] = (ev, label, body, tool, changed, False, cost)
+        if folded:
+            covered.add(folded)
+        if ev.kind == "tool_result":
+            hinted.update(d.dst_id for d in sub.parents(eid, "RESULT_OF"))
+    if excerpt:                                     # second pass: the best-ranked records that were too big
+        for eid in skipped[:3]:
+            room = cap - used - 4
+            if room < 120:
+                break
+            if eid in covered:
+                continue
+            ev = sub.event(eid)
+            tool, changed, label, body, folded = block_for(ev, attach=False)
+            head_cost = estimate_text_tokens("[99] " + label + " · excerpt") + 2
+            body = _excerpt(body, terms, room - head_cost)
+            if not body:
+                continue
+            if do_redact:
+                body, k = R.redact(body)
+                n_red += k
+            cost = head_cost + estimate_text_tokens(body)
+            used += cost
+            chosen[eid] = (ev, label + " · excerpt", body, tool, changed, True, cost)
+    pos = {e: i for i, e in enumerate(sub.event_ids)}
+    entries, blocks = [], []
+    for i, eid in enumerate(sorted(chosen, key=lambda e: pos.get(e, 0)), 1):
+        ev, label, body, tool, changed, is_excerpt, cost = chosen[eid]
+        blocks.append("[%d] %s\n%s" % (i, label, body))
+        entries.append({"n": i, "event_id": eid, "kind": ev.kind, "tool": tool, "time": _when(ev.timestamp),
+                        "line": _line_of(eid), "tokens": cost, "reason": "ranked", "excerpt": is_excerpt,
+                        "changed_later": changed})
+    return entries, blocks, state, n_red
 
 
 def _footer(m, entries, n_red: int) -> str:
@@ -399,6 +593,27 @@ def _result(found: bool, text: str, budget: int, info: dict, **kw) -> dict:
 
 def _norm(text: str) -> str:
     return " ".join((text or "").split())
+
+
+_SEARCH: dict = {}       # (graph object, include_recent) -> (searchable sub-graph, router); one graph at a time
+
+
+def _searcher(graph, include_recent: bool, router_name: str):
+    """The searchable sub-graph and a router that keeps its index across queries on the same graph."""
+    key = (id(graph), bool(include_recent), router_name)
+    hit = _SEARCH.get(key)
+    if hit is None or hit[0] is not graph:
+        if any(v[0] is not graph for v in _SEARCH.values()):
+            _SEARCH.clear()
+        sub = _searchable(graph, include_recent)
+        hit = (graph, sub, make_router(router_name, RouterConfig(k=DEFAULT_K)))
+        _SEARCH[key] = hit
+    return hit[1], hit[2]
+
+
+def auto_k(budget: int) -> int:
+    """How many records to rank for a budget: enough to fill it (about one per 100 tokens), 8..64."""
+    return max(DEFAULT_K, min(64, int(budget) // 100))
 
 
 def _searchable(graph, include_recent: bool):
@@ -429,9 +644,13 @@ def _trailing_reply_ids(graph) -> set:
 
 # --------------------------------------------------------------------------- recall
 
-def recall(transcript: str, query: str, budget: int = DEFAULT_RECALL_BUDGET, k: int = DEFAULT_K,
-           include_recent: bool = False, max_mb: float = DEFAULT_MAX_MB) -> dict:
-    """Verbatim records relevant to `query`, under `budget` tokens, labelled with where they came from."""
+def recall(transcript: str, query: str, budget: int = DEFAULT_RECALL_BUDGET, k: int = 0,
+           include_recent: bool = False, max_mb: float = DEFAULT_MAX_MB, router: str = "", closure: str = "",
+           pair=None, excerpt=None, packer: str = "") -> dict:
+    """Verbatim records relevant to `query`, under `budget` tokens, labelled with where they came from.
+
+    `k` (records ranked; 0 = enough to fill the budget), `router` and `closure` are tuning knobs; the
+    defaults are the measured ones (README, "Benchmark")."""
     t0 = time.time()
     query = " ".join((query or "").split())
     if not query:
@@ -443,22 +662,37 @@ def recall(transcript: str, query: str, budget: int = DEFAULT_RECALL_BUDGET, k: 
     if not include_recent and info["compactions"] == 0:
         return _result(False, "TracePack: this session has not been compacted, so all of it is still in your "
                               "context. (include_recent=true searches it anyway.)", budget, info)
-    sub = _searchable(graph, include_recent)
+    kk = int(k) if k else auto_k(budget)
+    sub, rt = _searcher(graph, include_recent, router or DEFAULT_ROUTER)
     if sub is None:
         return _result(False, "TracePack: no records outside your current context.", budget, info)
-    kk = max(1, min(int(k), 24))
-    seeds = list(make_router("hybrid", RouterConfig(k=kk)).retrieve(query, sub, kk))
-    entries, blocks, m, n_red = _pack(sub, graph, query, seeds, budget, kk)
+    seeds = list(rt.retrieve(query, sub, kk)) if (packer or DEFAULT_PACKER) != "greedy" else []
+    scope = "this session" if include_recent else "before the last compaction"
+    trunc = ""
+    if info.get("truncated"):
+        trunc = " (Searched the last %d MB of a %d MB transcript.)" % (
+            info["bytes_read"] // (1024 * 1024), info["bytes"] // (1024 * 1024))
+
+    def render(entries, blocks, m, n_red):
+        head = "TracePack: %d verbatim record%s from %s.%s" % (len(entries), "" if len(entries) == 1 else "s",
+                                                             scope, trunc)
+        foot = _footer(m, entries, n_red)
+        return head + "\n\n" + "\n\n".join(blocks) + ("\n\n" + foot if foot else "")
+
+    use_excerpt = DEFAULT_EXCERPT if excerpt is None else bool(excerpt)
+    if (packer or DEFAULT_PACKER) == "greedy":
+        ranked = [s.event_id for s in rt.retrieve(query, sub, min(len(sub.events), GREEDY_CANDIDATES))]
+        entries, blocks, m, n_red = _greedy(sub, graph, query, ranked, budget, use_excerpt)
+        text = render(entries, blocks, m, n_red)
+        while entries and estimate_text_tokens(text) > budget:      # estimate drift: drop the last record
+            entries, blocks = entries[:-1], blocks[:-1]
+            text = render(entries, blocks, m, n_red)
+    else:
+        entries, blocks, m, n_red, text = _fit(sub, graph, query, seeds, budget, kk, closure or DEFAULT_CLOSURE,
+                                               render, DEFAULT_PAIR if pair is None else bool(pair), use_excerpt)
     if not entries:
         return _result(False, "TracePack: nothing earlier in this session matches that.", budget, info,
                        searched=len(sub.events))
-    scope = "this session" if include_recent else "before the last compaction"
-    head = "TracePack: %d verbatim record%s from %s." % (len(entries), "" if len(entries) == 1 else "s", scope)
-    if info.get("truncated"):
-        head += " (Searched the last %d MB of a %d MB transcript.)" % (
-            info["bytes_read"] // (1024 * 1024), info["bytes"] // (1024 * 1024))
-    foot = _footer(m, entries, n_red)
-    text = head + "\n\n" + "\n\n".join(blocks) + ("\n\n" + foot if foot else "")
     return _result(True, text, budget, info, entries=entries, incomplete=bool(m.incomplete),
                    searched=len(sub.events), redacted=n_red, elapsed_ms=int((time.time() - t0) * 1000))
 
@@ -577,33 +811,29 @@ def post_compact_packet(transcript: str, budget: int = DEFAULT_INJECT_BUDGET, cu
     q = " ".join(((custom_instructions or "") + " " + q).split())
     if sub is None or not q:
         return _result(False, "", budget, info)
-    kk = DEFAULT_K
-    recent = _recent_seeds(sub, RECENT_PAIRS)
-    have = {s.event_id for s in recent}
-    hybrid = [s for s in make_router("hybrid", RouterConfig(k=kk)).retrieve(q, sub, kk) if s.event_id not in have]
-    seeds = recent + [Seed(event_id=s.event_id, score=s.score, source=s.source, rank=len(recent) + i, pinned=False)
-                      for i, s in enumerate(hybrid)]
-    b = int(min(MAX_BUDGET, max(MIN_BUDGET, int(budget))))
-    for _ in range(4):
-        entries, blocks, m, n_red = _pack(sub, graph, q, seeds, b, kk)
-        if not entries:
-            return _result(False, "", budget, info)
+    recent = [s.event_id for s in _recent_seeds(sub, RECENT_PAIRS)]
+    ranked = [s.event_id for s in make_router(DEFAULT_ROUTER, RouterConfig(k=DEFAULT_K)).retrieve(
+        q, sub, min(len(sub.events), GREEDY_CANDIDATES))]
+
+    def render(entries, blocks, m, n_red):
         head = ("TracePack: %d verbatim record%s from this session before the compaction, in the order they "
                 "happened. The summary above may have shortened them. Other records can be looked up with the "
                 "TracePack recall tool." % (len(entries), "" if len(entries) == 1 else "s"))
         foot = _footer(m, entries, n_red)
-        text = head + "\n\n" + "\n\n".join(blocks) + ("\n\n" + foot if foot else "")
-        if len(text) <= max_chars or b <= MIN_BUDGET:
+        return head + "\n\n" + "\n\n".join(blocks) + ("\n\n" + foot if foot else "")
+
+    b = int(min(MAX_BUDGET, max(MIN_BUDGET, int(budget))))
+    for _ in range(4):
+        entries, blocks, m, n_red = _greedy(sub, graph, q, ranked, b, DEFAULT_EXCERPT, pinned=recent)
+        if not entries:
+            return _result(False, "", budget, info)
+        text = render(entries, blocks, m, n_red)
+        if (len(text) <= max_chars and estimate_text_tokens(text) <= budget) or b <= MIN_BUDGET:
             break
-        b = max(MIN_BUDGET, int(b * max_chars / float(len(text)) * 0.9))
-    if len(text) > max_chars:                     # last resort: cut at a record boundary
-        keep = []
-        for blk in blocks:
-            if len(head) + sum(len(x) + 2 for x in keep) + len(blk) + 2 > max_chars - 200:
-                break
-            keep.append(blk)
-        entries = entries[:len(keep)]
-        text = head + "\n\n" + "\n\n".join(keep) + "\n\nMore records did not fit; use the TracePack recall tool."
+        b = max(MIN_BUDGET, int(b * min(max_chars / float(len(text)), budget / float(estimate_text_tokens(text))) * 0.9))
+    while entries and (len(text) > max_chars or estimate_text_tokens(text) > budget):
+        entries, blocks = entries[:-1], blocks[:-1]
+        text = render(entries, blocks, m, n_red)
     return _result(True, text, budget, info, entries=entries, incomplete=bool(m.incomplete), searched=len(sub.events),
                    redacted=n_red, query=q[:300], elapsed_ms=int((time.time() - t0) * 1000))
 

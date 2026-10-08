@@ -136,6 +136,48 @@ exceeded; a satisfiable closure leaves no dangling required event; an unsatisfia
 `incomplete`; a tool call is never split from its result; a superseded value is never served as the
 current one.
 
+## The compaction study: what to keep when the context fills up
+
+These are pre-registered, paired comparisons against strong baselines only, run with our research
+harness. That harness is not part of this release. In each benchmark, "ours" applies the same idea:
+alongside the summary, carry forward verbatim the raw text that will be needed.
+- **LongMemEval:** a note-taking summary, capped at 0.15 × the window, plus the user's own messages,
+  picked by content and kept verbatim, never rewritten, within 0.2 × the window.
+- **LOCA and BeyondSWE:** after a reset, the latest read-type tool outputs are put back (≤ 8k tokens,
+  ≤ 3k each).
+- **SWE-bench:** after each compaction, the file views that were forgotten are put back.
+
+| Benchmark · setting | Strong baseline | Ours − baseline [95% CI] | Reading |
+|---|---|---|---|
+| LongMemEval-S · 32k (≈3 compactions per question; 480 questions, same time window) | Codex's compaction (re-implemented from its source) | **+17.5 [+13.3, +21.7]** | Significant. +19.3 on 280 fresh questions. |
+| same | Note-taking summary at the same total budget (0.35 × window) | +1.0 [−2.3, +4.2] | Tie. Ours generates 30% fewer tokens. |
+| LongMemEval-S · 32k (agent loop, 200 questions) | Both arms given a link to the full transcript (as Claude Code does) | +5.0 [0.0, +10.0] | Earlier run; lower bound at 0. |
+| BeyondSWE · 64k (60 tasks) | Keep only the latest tool outputs | 0.0 [−5.0, +5.0] | Tie. |
+| LOCA · 64k, out of sample | Summary + the same budget of recent raw text | +6.0 [−2.7, +16.9] | Not significant. |
+| same | Keep only the latest tool outputs | +13.6 [+3.6, +26.6] | The original summary also gets +13.1 here, so what wins is the summary itself. |
+| SWE-bench Verified · 32k (242 checkpoints) | OpenHands' own compaction | Solve rate +3.3 [−1.4, +10.3]; hitting the step limit −10.8 [−18.6, −3.0] | Solve rate tied; hitting the step limit is significantly rarer, mostly on hard instances. |
+
+**Where the +17.5 over Codex comes from.**
+- **Every arm reads the answer when it is on screen.** Every arm answers .91–.94 of the questions
+  whose evidence is in what it kept. The whole difference is what each compaction kept.
+- **Codex's hand-off summary barely records user facts.** It held the needed fact in 4 of the 305
+  cases where that fact was on screen. Codex relies instead on the most recent user messages it keeps.
+- **Two pieces each pay, measured on the earlier version of the method:**
+  - picking the user's messages by content: +14.4 [+9.4, +19.4] over keeping the most recent ones;
+  - keeping them verbatim and append-only: +6.0 [+1.5, +10.6] over letting the summary rewrite them.
+- **Picking by content alone does not help Codex** (−4.6, not separable). It pays only together with
+  carrying the picked messages forward across compactions.
+- **The summary prompt mattered.** The first version reused a summary prompt written for coding
+  tasks; replacing it with a note-taking prompt is worth +12.1.
+
+Two findings from the same study:
+- **Re-reading has a cost even when it works.** In coding tasks the state lives in files, so
+  re-reading after compaction works and the solve rate ties the strongest baseline. It costs steps:
+  within 10 steps of a compaction, the agent re-read 46% of the files it had read before, against 9%
+  without compaction.
+- **Agents often don't use what they are given.** Given a link to the full transcript, 85% of the
+  wrong answers never opened it. Told "you have notes", agents re-read the files anyway.
+
 ## What we measured
 
 These numbers come from our own Claude Code sessions: 10 long sessions and 190 questions; free-form

@@ -9,6 +9,66 @@
 
 Zefeng Cai · independent researcher
 
+## Results
+
+### Compaction that keeps what can't be re-read: +17.5 points over Codex
+
+When the context fills up, Codex's compaction writes a hand-off summary of the task's progress and
+bets that the agent can re-read any detail later. That works for files. It fails for what the user
+said, which exists nowhere else: Codex's hand-off summary kept the needed fact in 4 of the 305
+cases where it was on screen.
+
+The TracePack study keeps those facts explicitly. A note-taking summary is paired with the user's own
+messages, picked by content and kept verbatim, never rewritten. On **LongMemEval-S** (long dialogues,
+histories of about 115k tokens), with a 32k window so that each question's history is compacted about
+three times:
+
+| 480 questions, same time window, same reader | Accuracy |
+|---|---|
+| **TracePack's compaction** (note-taking summary + the user's words, kept verbatim) | **86.0%** |
+| Codex's compaction (re-implemented from Codex's source) | 68.5% |
+
+- **+17.5 points, 95% CI [+13.3, +21.7].** It is higher on all six question types, and **+19.3 on
+  280 fresh questions**.
+- **The same budget spent only on a note-taking summary ties it** (+1.0 [−2.3, +4.2]). TracePack
+  generates 30% fewer tokens for that result.
+- **On SWE-bench Verified (32k)**, putting forgotten file views back after each compaction makes the
+  agent hit the step limit **10.8 points less often** than OpenHands' own compaction (−10.8
+  [−18.6, −3.0]). The solve rate is tied.
+
+These are pre-registered, paired runs from our research harness. The compaction method and the
+LongMemEval harness are not in this repository yet; the plugin below is the recall side of the same
+idea. Details and the other benchmarks are in [the research notes](docs/RESEARCH.md).
+
+### Recall after compaction: 2.5× more of the right lines than grep
+
+On **CodeMemo**, a public benchmark of 153 questions over 66 real Claude Code sessions (up to 430 MB of
+history per project), this is how often the turns that hold the answer come back, verbatim, within
+the same 2,000-token budget:
+
+| Within 2,000 tokens | Answer's turn delivered | Exact value delivered |
+|---|---|---|
+| **TracePack** | **34.6%** | **47%** |
+| Grep over the transcript (what Claude does without it) | 13.7% | 17% |
+| What's still in context (the newest 2,000 tokens) | 3.9% | 12% |
+| *Reference: a BM25 search engine over messages* | *34.0%* | *47%* |
+
+- **2.5× the evidence and 2.8× the exact values of grepping the transcript**, and about 9× what
+  is still in context.
+- **4.7× on debugging history.** For "how did we diagnose and fix X" questions it is 48%, against 10%
+  for grep.
+- **As good as a BM25 search engine, and packaged for an agent.** Whole records, each labelled with
+  tool, time and transcript line; a call with its short output; a hard budget.
+- **No model, no network.** About 0.4 s per question over histories of up to 52,000 records.
+- **Works live in Claude Code.** A random key printed before `/compact` came back exactly, in one
+  turn, without re-running anything.
+
+The test is model-free and deterministic: the turns CodeMemo marks as each answer's evidence have to come
+back inside the budget. Run `tracepack bench codememo --data <CodeMemo folder>` to reproduce it.
+TracePack's defaults were chosen on the odd-numbered questions. On the held-out even-numbered half it
+ties BM25 on evidence (34.7% vs 34.7%) and leads on exact values (43% vs 40%). Full tables are in
+[Benchmark](#benchmark).
+
 When Claude Code compacts a long session, the summary keeps the plan and drops the specifics: the
 exact error text, the path it created, the number a benchmark printed, the port you mentioned two
 hours ago. TracePack hands those back **verbatim**, inside a token budget, and labels each one with
@@ -53,10 +113,10 @@ command (and get different keys) or grep its own transcript file.
   - the latest tool outputs;
   - the records your `/compact` instructions and recent requests point at.
 
-  They come in the order they happened. Each is labelled `Bash output · 2026-10-08 13:14 · line 22`.
+  They come in the order they happened. Each is labelled, e.g. `Bash output of \`pytest -q\` · 10-08 13:14 · L22`.
 - **A `recall` tool** for anything else from before the compaction. Claude asks in plain words
   (*"exact error from the last pytest run"*, *"the DB port the user gave"*) and gets verbatim records
-  under a budget. A tool call always comes with its output.
+  under a budget, each labelled with the call that produced it.
 - **An `expand` tool** for the full text of one long record, page by page.
 - **Commands:**
   - `/tracepack:recall <question>`
@@ -66,21 +126,21 @@ command (and get different keys) or grep its own transcript file.
 This is what Claude sees after a compaction (the built-in demo session; run `tracepack demo`):
 
 ```
-TracePack: 12 verbatim records from this session before the compaction, in the order they happened.
+TracePack: 9 verbatim records from this session before the compaction, in the order they happened.
 The summary above may have shortened them. Other records can be looked up with the TracePack recall tool.
 
-[3] Bash call · 2026-10-08 17:01 · line 2
-$ python bench.py --rows 200000
-
-[4] Bash output · 2026-10-08 17:02 · line 3
+[3] Bash output of `python bench.py --rows 200000` · 10-08 17:02 · L3
 rows=200000 elapsed=41.7s p95_latency=812ms
 hot path: parse_rows 63% of time
 ...
-[11] Bash output · 2026-10-08 17:09 · line 10
+[6] Edit call · 10-08 17:06 · L7
+Edit {"file_path": "/work/demo/bench/parse.py", "new_string": "for line in buf.splitlines():", ...}
+...
+[8] Bash output of `python bench.py --rows 200000` · 10-08 17:09 · L10
 rows=200000 elapsed=29.3s p95_latency=530ms
 hot path: parse_rows 41% of time
 
-[12] user said · 2026-10-08 17:10 · line 11
+[9] user said · 10-08 17:10 · L11
 Good. Also the migration id we must not touch is 2026_09_30_add_ledger_index.
 ```
 
@@ -93,11 +153,13 @@ Good. Also the migration id we must not touch is 2026_09_30_add_ledger_index.
   - It recognises compactions, including the messages a compaction keeps verbatim.
   - It searches only what dropped out of context, so it doesn't spend the budget repeating what
     Claude already has.
-- **It ranks without a model.** It scores records against the question with BM25 plus a hashing
-  embedding.
-- **It packs whole records.** It follows dependency links (a call to its output, a value to where
-  it came from) and packs whole records into a hard token budget. A record too large for the budget
-  is excerpted and labelled as such, never cut silently.
+- **It ranks without a model.** It scores records against the question with BM25.
+- **It fills the budget with whole records, best first.**
+  - A tool output is labelled with the call that produced it.
+  - A call carries its short output.
+  - If a top record is too large for what's left, a labelled excerpt of its matching lines takes
+    its place; nothing is cut silently.
+  - The records are then shown in the order they happened.
 - **It masks secrets.** Strings that look like credentials (API keys, tokens, passwords) are masked
   in everything it hands back.
 - **Two hooks, both cheap:**
@@ -106,7 +168,7 @@ Good. Also the migration id we must not touch is 2026_09_30_add_ledger_index.
 
   There are no per-tool-call hooks, no daemon and no ports. Claude Code writes the compaction
   summary only after these hooks run. So TracePack builds its query from your `/compact`
-  instructions and the latest work, and it always includes the latest tool outputs.
+  instructions and the latest work, and it pins the latest tool outputs first.
 
 ## When it helps, and when it doesn't
 
@@ -157,6 +219,7 @@ tracepack recall "exact error from the last pytest run"     # newest session of 
 tracepack recall "the port I gave you" --session <id or path>
 tracepack expand 417                                        # one record in full
 tracepack status | last | sessions | demo | doctor
+tracepack bench codememo --data <CodeMemo folder>     # the benchmark above
 ```
 
 ## Other agents (MCP)
@@ -170,6 +233,61 @@ tracepack status | last | sessions | demo | doctor
 
 The Python API also reads pi sessions and OpenHands traces (`tracepack.pack`). It ships an
 OpenHands condenser and a LlamaIndex memory block; see [the library reference](docs/RESEARCH.md).
+
+## Benchmark
+
+[CodeMemo](https://github.com/laynepenney/codememo-benchmark) (MIT) has 158 questions over 66 Claude Code
+sessions from three software projects; 153 of them have evidence turns that can be located. Each
+project's sessions are joined in order into one long history, as if it were one session compacted many
+times. For every question and budget, a method hands back records, and we check two things:
+- **Answer's turn delivered:** at least one of the turns CodeMemo lists as the answer's evidence is among them.
+- **Exact value delivered** (in parentheses): the specific value in the short answer appears verbatim.
+  This counts only the questions whose short answer contains a number, version, path or identifier.
+
+All methods count tokens the same way (about 4 characters per token).
+
+| Method | 1,000 tokens | 2,000 tokens | 4,000 tokens |
+|---|---|---|---|
+| **TracePack** | 26.1% (37%) | 34.6% (47%) | 39.2% (56%) |
+| BM25 over messages | 29.4% (36%) | 34.0% (47%) | 40.5% (55%) |
+| grep over the transcript | 10.5% (12%) | 13.7% (17%) | 17.0% (21%) |
+| newest context only | 3.3% (8%) | 3.9% (12%) | 5.2% (16%) |
+
+- **TracePack** is `recall` with its defaults: BM25 ranking, whole records in rank order, labels, a
+  call's short output folded in, and excerpts for top records that don't fit.
+- **BM25** is the same ranking without labels or folding: the strongest simple baseline.
+- **grep** reads the raw JSON lines that contain the question's two most specific words, in file
+  order, each cut to 2,000 characters.
+- **Newest context** is the last records that fit.
+
+By question category, at 2,000 tokens (answer's turn delivered):
+
+| Category | TracePack | BM25 | grep | newest context |
+|---|---|---|---|---|
+| Factual | 37% | 37% | 17% | 6% |
+| Debug | 48% | 45% | 10% | 0% |
+| Architecture | 32% | 32% | 7% | 4% |
+| Temporal | 24% | 24% | 14% | 5% |
+| Convention | 35% | 35% | 20% | 5% |
+| Cross-session | 25% | 25% | 15% | 5% |
+
+The defaults (BM25 rather than BM25 plus a hashing embedding, no dependency closure, rank-order packing)
+were chosen on the odd-numbered questions and checked on the even-numbered ones, at 2,000 tokens:
+
+| Half | Method | Answer's turn | Exact value |
+|---|---|---|---|
+| odd (n=78) | tracepack | 34.6% | 51% |
+| odd (n=78) | bm25 | 33.3% | 53% |
+| even (n=75) | tracepack | 34.7% | 43% |
+| even (n=75) | bm25 | 34.7% | 40% |
+
+Two things this does not measure:
+- **Answer accuracy.** That also depends on the model reading the records.
+- **The automatic restore after `/compact`.** That uses the same packer with the latest tool outputs
+  pinned first.
+
+The earlier research measurements, including where dependency closure did and did not pay, are in
+[the research notes](docs/RESEARCH.md).
 
 ## Troubleshooting
 

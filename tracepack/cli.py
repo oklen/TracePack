@@ -8,6 +8,7 @@
     tracepack sessions                                           # this project's recent sessions
     tracepack demo                                               # try it on a built-in example session
     tracepack doctor                                             # check the install end to end
+    tracepack bench codememo --data <folder>                     # the evidence benchmark in the README
     tracepack mcp                                                # run the MCP server on stdio
 """
 from __future__ import annotations
@@ -197,6 +198,14 @@ def build_parser() -> argparse.ArgumentParser:
     d = sub.add_parser("doctor", help="check the install end to end")
     d.add_argument("--cwd", default="")
     d.set_defaults(fn=cmd_doctor)
+
+    bn = sub.add_parser("bench", help="run the CodeMemo evidence benchmark (see README, Benchmark)")
+    bn.add_argument("suite", choices=["codememo"])
+    bn.add_argument("--data", required=True, help="CodeMemo folder (project_*/questions.json + sessions/)")
+    bn.add_argument("--budgets", default="1000,2000,4000")
+    bn.add_argument("--json", default="")
+    bn.set_defaults(fn=lambda a: __import__("tracepack.bench.codememo", fromlist=["main"]).main(
+        ["--data", a.data, "--budgets", a.budgets] + (["--json", a.json] if a.json else [])))
 
     m = sub.add_parser("mcp", help="run the MCP server on stdio")
     m.set_defaults(fn=lambda a: (__import__("tracepack.mcp_server", fromlist=["main"]).main(), 0)[1])
