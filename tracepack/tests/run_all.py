@@ -76,6 +76,9 @@ CONTRACTS = {
     # the product (README): the Claude Code plugin
     18: "plugin: recall serves only records that left the context, verbatim, labelled and inside the budget; the after-compaction hook adds the latest outputs under the 8,000-char cap and fails open; the MCP server speaks the protocol and binds to the calling session; credentials are masked",
     17: "baselines: the new arm builder is byte-identical to the published one for B and C; each factor bites; identifier chasing reads only retrieved text; ContextWeaver follows Algorithm 1 (BFS ancestry bounded by W, non-ancestors keep the action and lose the observation, warmup keeps everything); a dead analyzer collapses the ancestry instead of faking a recency window; graph construction cannot see an instruction issued later",
+    # 0.4.0: note-taking compaction in the plugin, and the LongMemEval harness in the repo
+    19: "compaction notes: PreCompact prints the note-taking instructions (nothing when off); the restore brings back the user's own sentences verbatim, dated, picked by content, inside the budget and the char cap, and leaves room for tool records",
+    20: "bench lme: every prompt and judge template is byte-identical to the study's; each arm compacts as declared; the bootstrap is the study's; the Claude Code bridge keeps text and roles; the driver reads back what a compaction left",
 }
 
 _CONTRACT_RE = re.compile(r"Contract(\d{1,2})")

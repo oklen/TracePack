@@ -35,6 +35,7 @@ import re
 import time
 
 from tracepack import redact as R
+from tracepack import userwords as UW
 from tracepack.adapters.claude_code import ClaudeCodeAdapter
 from tracepack.core.assembler import AssemblerConfig, BudgetAssembler
 
@@ -49,7 +50,7 @@ from tracepack.core.router import RouterConfig, make_router
 from tracepack.core.schema import Seed
 
 DEFAULT_RECALL_BUDGET = 2000
-DEFAULT_INJECT_BUDGET = 1500
+DEFAULT_INJECT_BUDGET = 2000
 DEFAULT_MAX_MB = 64
 DEFAULT_K = 8
 DEFAULT_ROUTER = "lexical"       # BM25; CodeMemo odd half: beats the BM25+hashing hybrid (34.6% vs 30.8%)
@@ -61,6 +62,7 @@ GREEDY_CANDIDATES = 300          # how deep the ranking goes when filling the bu
 MIN_BUDGET, MAX_BUDGET = 200, 12000
 INJECT_MAX_CHARS = 8000          # Claude Code moves additionalContext over 10,000 chars into a file
 RECENT_PAIRS = 3                 # after a compaction, the latest tool outputs are pinned in
+USER_SHARE = 0.4                 # of the restore, for the user's own words when the session also has tool records
 SEP = "\n\x1f\n"                 # entry separator inside the packer; never shown to the model
 HEADER_ALLOWANCE = 22            # tokens reserved per entry for the provenance line
 
@@ -789,10 +791,48 @@ def _recent_seeds(sub, n_pairs: int):
     return seeds
 
 
+def _records(sub, graph, q: str, budget: int, max_chars: int):
+    """The latest tool outputs, then the records `q` points at, as one rendered block within `budget` tokens and
+    `max_chars`. -> (text, entries, incomplete, n_redacted, searched)"""
+    recent = [s.event_id for s in _recent_seeds(sub, RECENT_PAIRS)]
+    ranked = [s.event_id for s in make_router(DEFAULT_ROUTER, RouterConfig(k=DEFAULT_K)).retrieve(
+        q, sub, min(len(sub.events), GREEDY_CANDIDATES))]
+
+    def render(entries, blocks, m, n_red):
+        head = ("TracePack: %d verbatim record%s from this session before the compaction, in the order they "
+                "happened. The summary above may have shortened them. Other records can be looked up with the "
+                "TracePack recall tool." % (len(entries), "" if len(entries) == 1 else "s"))
+        foot = _footer(m, entries, n_red)
+        return head + "\n\n" + "\n\n".join(blocks) + ("\n\n" + foot if foot else "")
+
+    b = int(min(MAX_BUDGET, max(MIN_BUDGET, int(budget))))
+    entries, text, m, n_red = [], "", None, 0
+    for _ in range(4):
+        entries, blocks, m, n_red = _greedy(sub, graph, q, ranked, b, DEFAULT_EXCERPT, pinned=recent)
+        if not entries:
+            return "", [], False, 0, len(sub.events)
+        text = render(entries, blocks, m, n_red)
+        if (len(text) <= max_chars and estimate_text_tokens(text) <= budget) or b <= MIN_BUDGET:
+            break
+        b = max(MIN_BUDGET, int(b * min(max_chars / float(len(text)), budget / float(estimate_text_tokens(text))) * 0.9))
+    while entries and (len(text) > max_chars or estimate_text_tokens(text) > budget):
+        entries, blocks = entries[:-1], blocks[:-1]
+        text = render(entries, blocks, m, n_red)
+    if not entries:
+        return "", [], False, 0, len(sub.events)
+    return text, entries, bool(m.incomplete), n_red, len(sub.events)
+
+
 def post_compact_packet(transcript: str, budget: int = DEFAULT_INJECT_BUDGET, custom_instructions: str = "",
-                        upto_bytes: int = 0, max_mb: float = DEFAULT_MAX_MB, max_chars: int = INJECT_MAX_CHARS) -> dict:
-    """What the SessionStart(compact) hook adds: the latest tool outputs, plus the records that the user's
-    `/compact` instructions and the most recent requests point at, under `budget` tokens and `max_chars`."""
+                        upto_bytes: int = 0, max_mb: float = DEFAULT_MAX_MB, max_chars: int = INJECT_MAX_CHARS,
+                        user_words=None) -> dict:
+    """What the SessionStart(compact) hook adds, under `budget` tokens and `max_chars`:
+
+    1. the user's own words: sentences that state facts, picked by content from everything the user said
+       (`tracepack.userwords`), verbatim and dated -- all of the budget in a conversation, 40% of it when the
+       session also has tool records;
+    2. the latest tool outputs, plus the records that the user's `/compact` instructions and the most recent
+       requests point at, in what is left."""
     t0 = time.time()
     graph, info = load_graph(transcript, max_mb, upto_bytes)
     if graph is None or not graph.events:
@@ -809,33 +849,32 @@ def post_compact_packet(transcript: str, budget: int = DEFAULT_INJECT_BUDGET, cu
             sub = _restrict(sub, tail)
         q = _recent_query(graph)
     q = " ".join(((custom_instructions or "") + " " + q).split())
-    if sub is None or not q:
+    if sub is None:
         return _result(False, "", budget, info)
-    recent = [s.event_id for s in _recent_seeds(sub, RECENT_PAIRS)]
-    ranked = [s.event_id for s in make_router(DEFAULT_ROUTER, RouterConfig(k=DEFAULT_K)).retrieve(
-        q, sub, min(len(sub.events), GREEDY_CANDIDATES))]
-
-    def render(entries, blocks, m, n_red):
-        head = ("TracePack: %d verbatim record%s from this session before the compaction, in the order they "
-                "happened. The summary above may have shortened them. Other records can be looked up with the "
-                "TracePack recall tool." % (len(entries), "" if len(entries) == 1 else "s"))
-        foot = _footer(m, entries, n_red)
-        return head + "\n\n" + "\n\n".join(blocks) + ("\n\n" + foot if foot else "")
-
-    b = int(min(MAX_BUDGET, max(MIN_BUDGET, int(budget))))
-    for _ in range(4):
-        entries, blocks, m, n_red = _greedy(sub, graph, q, ranked, b, DEFAULT_EXCERPT, pinned=recent)
-        if not entries:
-            return _result(False, "", budget, info)
-        text = render(entries, blocks, m, n_red)
-        if (len(text) <= max_chars and estimate_text_tokens(text) <= budget) or b <= MIN_BUDGET:
-            break
-        b = max(MIN_BUDGET, int(b * min(max_chars / float(len(text)), budget / float(estimate_text_tokens(text))) * 0.9))
-    while entries and (len(text) > max_chars or estimate_text_tokens(text) > budget):
-        entries, blocks = entries[:-1], blocks[:-1]
-        text = render(entries, blocks, m, n_red)
-    return _result(True, text, budget, info, entries=entries, incomplete=bool(m.incomplete), searched=len(sub.events),
-                   redacted=n_red, query=q[:300], elapsed_ms=int((time.time() - t0) * 1000))
+    if user_words is None:
+        user_words = os.environ.get("TRACEPACK_USER_WORDS", "1") != "0"
+    has_tools = any(e.kind in ("tool_call", "tool_result") for e in sub.events)
+    uw_text, uw_ids, n_sent, n_red_u = "", [], 0, 0
+    if user_words:
+        share = USER_SHARE if has_tools else 1.0
+        users = [e for e in sub.events if e.kind == "user"]
+        uw_text, uw_ids, n_sent = UW.pick(users, int(budget * share), int(max_chars * share))
+        if uw_text and R.enabled():
+            uw_text, n_red_u = R.redact(uw_text)
+    gap = 2 if uw_text else 0
+    rest_budget = budget - estimate_text_tokens(uw_text) - gap
+    rest_chars = max_chars - len(uw_text) - gap
+    rec_text, entries, incomplete, n_red, searched = "", [], False, 0, len(sub.events)
+    if q and rest_budget >= MIN_BUDGET and rest_chars >= 4 * MIN_BUDGET:
+        rsub = _restrict(sub, set(uw_ids)) if uw_ids else sub
+        if rsub is not None:
+            rec_text, entries, incomplete, n_red, searched = _records(rsub, graph, q, rest_budget, rest_chars)
+    if not uw_text and not rec_text:
+        return _result(False, "", budget, info)
+    text = "\n\n".join(x for x in (uw_text, rec_text) if x)
+    return _result(True, text, budget, info, entries=entries, incomplete=incomplete, searched=searched,
+                   redacted=n_red + n_red_u, user_sentences=n_sent, user_messages=len(uw_ids), query=q[:300],
+                   elapsed_ms=int((time.time() - t0) * 1000))
 
 
 # --------------------------------------------------------------------------- status

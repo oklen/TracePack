@@ -1,6 +1,6 @@
 # TracePack
 
-**After `/compact`, get the exact lines back.**
+**Compaction that keeps what you said. After `/compact`, the exact lines come back.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)
@@ -10,6 +10,49 @@
 Zefeng Cai · independent researcher
 
 ## Results
+
+### Claude Code with TracePack: +43.7 points on LongMemEval
+
+Real Claude Code (2.1.294) answered the same 480 LongMemEval-S questions twice, once as shipped and once
+with this plugin. For each question:
+- the history (about 50 chat sessions, ~115k tokens) is replayed into a Claude Code session;
+- whenever the conversation passes 32k tokens, it is compacted with `/compact` (three times for nearly
+  every question);
+- the question is then answered from what is left, with no tools.
+
+Every arm used the same model (DeepSeek-V4-Pro, through the built-in bridge) and the same compaction
+points. LongMemEval's official prompts graded the answers.
+
+| 480 questions, same model | Accuracy |
+|---|---|
+| **Claude Code + TracePack** | **75.8%** |
+| Claude Code + TracePack, notes only | 70.2% |
+| Claude Code + TracePack, your words only | 53.8% |
+| Claude Code | 32.1% |
+| *Reference: Codex's compaction* | *68.1%* |
+
+- **+43.7 points, 95% CI [+39.0, +48.5].** It wins 219 questions and loses 9, and it is higher on all
+  six question types: multi-session 21% → 73%, temporal reasoning 19% → 71%, facts the user stated
+  42% → 94%.
+- **Both halves pay on their own.** The dated notes add +38.1. Restoring your words adds +21.7.
+- **Why stock Claude Code loses so much here.** Its compaction prompt is written for coding: request,
+  files, errors, next step. After three compactions most personal facts are gone, and it answered
+  "I don't have that information" to 271 of the 480 questions (80 with TracePack). Unlike Codex, it
+  keeps none of your messages verbatim.
+- **What it costs:** summaries about 45% longer (median 5.5k vs 3.8k tokens), plus about 2.2k tokens
+  restored after each compaction.
+- **What is still left.** The study's own method, run in the harness with the same model, scores
+  81.9%. Its verbatim part is three times larger (6.5k tokens, picked by the model), against the
+  plugin's 2k tokens picked locally.
+
+This setting is deliberately hard: a 32k window forces three compactions of a 115k-token history. Claude
+Code's real window is 200k, so this happens only in much longer sessions. Two more things differ from
+everyday use:
+- the model is DeepSeek-V4-Pro, not Claude;
+- Claude Code shows the model the machine's date, while each question states its own date.
+
+Reproduce it with `tracepack bench lme run --arms claude-code,claude-code+tracepack`
+([how](docs/BENCH_LME.md)).
 
 ### Compaction that keeps what can't be re-read: +17.5 points over Codex
 
@@ -36,9 +79,11 @@ three times:
   agent hit the step limit **10.8 points less often** than OpenHands' own compaction (−10.8
   [−18.6, −3.0]). The solve rate is tied.
 
-These are pre-registered, paired runs from our research harness. The compaction method and the
-LongMemEval harness are not in this repository yet; the plugin below is the recall side of the same
-idea. Details and the other benchmarks are in [the research notes](docs/RESEARCH.md).
+These are pre-registered, paired runs from our research harness. Its LongMemEval part is now in this
+repository as `tracepack bench lme`: the prompts are byte-identical to the study's, and fed the study's
+verdicts, its report prints this table. Re-run with DeepSeek-V4-Pro as the model, the same method beats
+Codex's compaction by +13.7 [+8.8, +18.5]. Details and the other benchmarks are in
+[the research notes](docs/RESEARCH.md).
 
 ### Recall after compaction: 2.5× more of the right lines than grep
 
@@ -74,8 +119,9 @@ exact error text, the path it created, the number a benchmark printed, the port 
 hours ago. TracePack hands those back **verbatim**, inside a token budget, and labels each one with
 where it came from.
 
-It reads the transcript Claude Code already keeps on disk. It makes no model calls and needs no API
-key. There is no background process, and nothing leaves your machine.
+It reads the transcript Claude Code already keeps on disk. It makes no model calls of its own: the
+notes are written by Claude Code's own compaction. It needs no API key, runs no background process, and
+nothing leaves your machine.
 
 ## Install
 
@@ -108,8 +154,12 @@ command (and get different keys) or grep its own transcript file.
 
 ## What you get
 
-- **Records come back automatically after every compaction.** Within ~1,500 tokens, TracePack adds
-  back:
+- **Claude Code's compaction keeps notes.** Every compaction, manual or automatic, also writes a
+  dated "Notes" section: one line per fact you stated (requirements, constraints, preferences, names,
+  numbers, paths, versions), per answer Claude gave you, and per change, with the old and new value.
+  Values are copied as stated, and notes carry over from one compaction to the next.
+- **Your own words come back after every compaction.** Within ~2,000 tokens, TracePack adds back:
+  - your sentences that state facts, picked by content from everything you said, verbatim and dated;
   - the latest tool outputs;
   - the records your `/compact` instructions and recent requests point at.
 
@@ -126,22 +176,29 @@ command (and get different keys) or grep its own transcript file.
 This is what Claude sees after a compaction (the built-in demo session; run `tracepack demo`):
 
 ```
-TracePack: 9 verbatim records from this session before the compaction, in the order they happened.
+TracePack: the user's own words from before the compaction, verbatim. These sentences were picked
+because they state facts (names, numbers, dates, preferences, decisions, constraints); "…" marks
+where a message was shortened. The summary above may have paraphrased them.
+
+[u1] user said · 2026-10-08 17:00 · L1
+… Profile it and keep the numbers; the staging DB is at port 6543.
+
+[u2] user said · 2026-10-08 17:10 · L11
+… Also the migration id we must not touch is 2026_09_30_add_ledger_index.
+
+TracePack: 7 verbatim records from this session before the compaction, in the order they happened.
 The summary above may have shortened them. Other records can be looked up with the TracePack recall tool.
 
-[3] Bash output of `python bench.py --rows 200000` · 10-08 17:02 · L3
+[2] Bash output of `python bench.py --rows 200000` · 10-08 17:02 · L3
 rows=200000 elapsed=41.7s p95_latency=812ms
 hot path: parse_rows 63% of time
 ...
-[6] Edit call · 10-08 17:06 · L7
+[5] Edit call · 10-08 17:06 · L7
 Edit {"file_path": "/work/demo/bench/parse.py", "new_string": "for line in buf.splitlines():", ...}
 ...
-[8] Bash output of `python bench.py --rows 200000` · 10-08 17:09 · L10
+[7] Bash output of `python bench.py --rows 200000` · 10-08 17:09 · L10
 rows=200000 elapsed=29.3s p95_latency=530ms
 hot path: parse_rows 41% of time
-
-[9] user said · 10-08 17:10 · L11
-Good. Also the migration id we must not touch is 2026_09_30_add_ledger_index.
 ```
 
 ## How it works
@@ -162,9 +219,15 @@ Good. Also the migration id we must not touch is 2026_09_30_add_ledger_index.
   - The records are then shown in the order they happened.
 - **It masks secrets.** Strings that look like credentials (API keys, tokens, passwords) are masked
   in everything it hands back.
+- **It picks your words without a model.** Each sentence you wrote is scored for facts: numbers,
+  dates, names, identifiers, first-person statements, preferences, plans, decisions, constraints such
+  as "never" or "must". Questions, thanks and pasted material score low. The sentences with the most
+  facts per token come back, so the one fact inside a long message can return without the rest.
 - **Two hooks, both cheap:**
-  - PreCompact notes your `/compact` instructions.
-  - SessionStart, right after a compaction, adds the records back.
+  - PreCompact notes your `/compact` instructions and prints the note-taking instructions. Claude
+    Code appends whatever a PreCompact hook prints to its own compaction prompt, after your
+    `/compact` instructions.
+  - SessionStart, right after a compaction, adds your words and the records back.
 
   There are no per-tool-call hooks, no daemon and no ports. Claude Code writes the compaction
   summary only after these hooks run. So TracePack builds its query from your `/compact`
@@ -191,8 +254,9 @@ re-reading isn't an option; see [the research notes](docs/RESEARCH.md).
 - **Local only.** It reads files on your machine and writes a few small JSON files to the plugin's
   data folder (`~/.claude/plugins/data/tracepack…`). It makes no network calls, collects no
   telemetry and calls no model.
-- **Cost.** The only cost is the tokens it adds: at most ~1,500 per compaction by default, and none
-  otherwise. Tool outputs from `recall` are sized by the budget Claude asks for.
+- **Cost.** The only cost is the tokens it adds: the notes in each compaction summary, and at most
+  ~2,000 tokens after each compaction. Nothing otherwise. Tool outputs from `recall` are sized by
+  the budget Claude asks for.
 - **Your files stay as they are.** It never writes into your repository or your settings.
 - **Transcripts expire.** They belong to Claude Code, which deletes them after `cleanupPeriodDays`
   (30 days by default). TracePack can recall only what still exists.
@@ -204,7 +268,9 @@ The defaults need no setup. To change them, set environment variables, for examp
 
 | Variable | Default | Effect |
 |---|---|---|
-| `TRACEPACK_INJECT_BUDGET` | `1500` | Tokens added after each compaction. `0` turns this off. |
+| `TRACEPACK_NOTES` | `1` | Ask each compaction to keep dated notes. `0` turns this off. |
+| `TRACEPACK_INJECT_BUDGET` | `2000` | Tokens added after each compaction (8,000 characters at most). `0` turns this off. |
+| `TRACEPACK_USER_WORDS` | `1` | Include your own sentences in what is added. `0` adds only records. |
 | `TRACEPACK_RECALL_BUDGET` | `2000` | Default size of a `recall` answer. |
 | `TRACEPACK_MAX_MB` | `64` | For a very large transcript, read only its newest part. |
 | `TRACEPACK_REDACT` | `1` | Mask credential-like strings. `0` turns masking off. |
@@ -219,7 +285,8 @@ tracepack recall "exact error from the last pytest run"     # newest session of 
 tracepack recall "the port I gave you" --session <id or path>
 tracepack expand 417                                        # one record in full
 tracepack status | last | sessions | demo | doctor
-tracepack bench codememo --data <CodeMemo folder>     # the benchmark above
+tracepack bench codememo --data <CodeMemo folder>          # the recall benchmark (no model)
+tracepack bench lme run --arms tracepack,codex --out runs   # LongMemEval with compaction (needs a model)
 ```
 
 ## Other agents (MCP)
@@ -284,18 +351,48 @@ were chosen on the odd-numbered questions and checked on the even-numbered ones,
 Two things this does not measure:
 - **Answer accuracy.** That also depends on the model reading the records.
 - **The automatic restore after `/compact`.** That uses the same packer with the latest tool outputs
-  pinned first.
+  pinned first. The LongMemEval result above measures the restore and the notes end to end.
 
 The earlier research measurements, including where dependency closure did and did not pay, are in
 [the research notes](docs/RESEARCH.md).
+
+### LongMemEval with compaction
+
+`tracepack bench lme` is the harness behind the compaction results above. Each LongMemEval-S
+history (about 50 sessions, ~115k tokens) is streamed into a 32k context, compacted by the arm whenever
+it fills up, and the question is asked once at the end, with no tools; LongMemEval's official prompts
+grade the answer. The arms:
+
+- `tracepack`: the study's method (a note-taking summary plus the user's own messages, picked by content
+  and kept verbatim).
+- `codex`: Codex CLI's compaction, re-implemented from its source.
+- `notes`: the note-taking summary alone, with the same total budget.
+- `full`: no compaction.
+- `claude-code` and `claude-code+tracepack`: real Claude Code, without and with this plugin, plus two
+  ablations.
+
+Prompts, budgets and statistics are the study's, and the tests check the prompts byte for byte. Any
+OpenAI-compatible model works:
+
+```bash
+pip install tiktoken
+export TRACEPACK_LLM_BASE_URL=… TRACEPACK_LLM_API_KEY=… TRACEPACK_LLM_MODEL=… TRACEPACK_JUDGE_MODEL=…
+tracepack bench lme run --arms tracepack,codex --out runs/lme      # resumable; --dry-run makes no calls
+tracepack bench lme report --out runs/lme
+```
+
+Roughly 150k input tokens per question per arm. Setup, the Claude Code arms and the output format are
+described in [docs/BENCH_LME.md](docs/BENCH_LME.md).
 
 ## Troubleshooting
 
 - **Run `/tracepack:status` or `tracepack doctor`.** The doctor checks Python, finds your
   transcripts, and runs the whole path on a built-in example session.
 - **`python3: command not found`:** install Python 3.9 or newer.
-- **Nothing restored after `/compact`:** either there was no tool output before the compaction, or
-  `TRACEPACK_INJECT_BUDGET` is `0`.
+- **Nothing restored after `/compact`:** either nothing before the compaction qualified (no tool
+  output and no sentence of yours with a fact), or `TRACEPACK_INJECT_BUDGET` is `0`.
+- **The note-taking text shows up after a manual `/compact`:** Claude Code prints every PreCompact
+  hook's output in the `/compact` result. `TRACEPACK_NOTES=0` turns the notes off.
 - **Hook errors:** they never interrupt Claude. They are logged to `hook_errors.log` in the data
   folder, and `tracepack doctor` reports them.
 
@@ -311,7 +408,7 @@ Uninstalling removes the plugin's data folder. Your transcripts are not touched.
 ## Development
 
 ```bash
-python3 tracepack/tests/run_all.py                 # 293 tests, contract by contract
+python3 tracepack/tests/run_all.py                 # 310 tests, contract by contract
 claude plugin validate . --strict                  # manifest, marketplace, hooks, MCP config
 claude --plugin-dir .                              # try the working copy in Claude Code
 ```

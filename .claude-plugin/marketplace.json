@@ -5,20 +5,26 @@
     "url": "https://github.com/oklen"
   },
   "metadata": {
-    "description": "TracePack: exact recall for Claude Code after /compact"
+    "description": "TracePack: compaction that keeps what you said, for Claude Code"
   },
   "plugins": [
     {
       "name": "tracepack",
       "source": "./",
-      "description": "Exact recall after /compact: the precise command output, paths, numbers and instructions the summary dropped, verbatim and labelled with where they came from. Local, no model calls.",
-      "version": "0.3.0",
+      "description": "Compaction that keeps what you said: dated notes of every stated fact in Claude Code's summary, then your own words and the exact outputs it dropped, verbatim. Local, no model calls.",
+      "version": "0.4.0",
       "author": {
         "name": "Zefeng Cai"
       },
       "homepage": "https://github.com/oklen/TracePack",
       "license": "MIT",
-      "keywords": ["compaction", "context", "memory", "recall", "mcp"],
+      "keywords": [
+        "compaction",
+        "context",
+        "memory",
+        "recall",
+        "mcp"
+      ],
       "category": "productivity"
     }
   ]

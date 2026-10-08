@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.0 — 2026-10-08
+
+Compaction that keeps what you said, built into the plugin, and the LongMemEval harness in the repo.
+
+**Result.** On 480 LongMemEval-S questions, compacted three times each at 32k, real Claude Code with the
+plugin answers 75.8%, against 32.1% without it: +43.7 [+39.0, +48.5]. Notes alone add +38.1 and your
+words alone +21.7 (same model, DeepSeek-V4-Pro, for every arm). See the README.
+
+- **Note-taking compaction.** The PreCompact hook now prints note-taking instructions, which Claude Code
+  appends to its own compaction prompt (after your `/compact` instructions). Every summary ends with a dated
+  "Notes" section: each fact you stated, each answer Claude gave, each change with its old and new value,
+  copied as stated and carried over between compactions. `TRACEPACK_NOTES=0` turns it off.
+- **Your own words come back.** After a compaction the restore starts with your sentences that state facts,
+  picked by content from everything you said (numbers, dates, names, identifiers, preferences, decisions,
+  constraints; no model), verbatim and dated. In a coding session they take at most 40% of the restore and
+  the tool records the rest. `TRACEPACK_USER_WORDS=0` turns them off.
+- **The restore budget is 2,000 tokens** (was 1,500), still capped at 8,000 characters.
+- **`tracepack bench lme`**: the LongMemEval harness of the compaction study, with model calls through
+  `TRACEPACK_LLM_*` / `TRACEPACK_JUDGE_*` environment variables (any OpenAI-compatible endpoint):
+  - arms `tracepack`, `codex` (Codex CLI's compaction re-implemented from its source), `notes`, `full`;
+  - arms that run real Claude Code with and without the plugin (`claude-code`, `claude-code+tracepack`, and
+    two ablations), through a small bridge from the Anthropic Messages API to the same model;
+  - the study's 480 questions, prompts, budgets, temperatures and bootstrap. Tests check every prompt
+    byte for byte; fed the study's verdicts, `report` prints the published table.
+- **Tests:** contracts 19 and 20, 310 tests in total.
+
 ## 0.3.0 — 2026-10-08
 
 Recall is now measured on a public benchmark, and tuned so that it matches a BM25 search engine.

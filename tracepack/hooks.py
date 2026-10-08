@@ -1,15 +1,22 @@
 """tracepack.hooks -- Claude Code hook entry points (each reads the hook's JSON on stdin).
 
-    python3 -m tracepack.hooks pre-compact      # PreCompact: remember the /compact instructions
-    python3 -m tracepack.hooks session-start    # SessionStart: remember the session; after a compaction,
-                                                # add back the exact records the summary is likely to drop
+    python3 -m tracepack.hooks pre-compact      # PreCompact: remember the /compact instructions, and ask the
+                                                # compaction to keep dated notes of every stated fact
+    python3 -m tracepack.hooks session-start    # SessionStart: remember the session; after a compaction, add
+                                                # back the user's own words and the exact records the summary
+                                                # is likely to drop
 
-Claude Code runs PreCompact, then SessionStart(source="compact"), then PostCompact, and writes the
-compaction summary into the transcript only after all three. So at SessionStart(compact) everything
-in the transcript is out of the model's context, and the best hints about what comes next are the
-user's `/compact` instructions (seen only by PreCompact) and the latest requests.
+Claude Code appends whatever a PreCompact hook prints to its compaction prompt, under "Additional
+Instructions" (after the user's own /compact instructions). It runs PreCompact, then
+SessionStart(source="compact"), then PostCompact, and writes the compaction summary into the
+transcript only after all three. So at SessionStart(compact) everything in the transcript is out of
+the model's context, and the best hints about what comes next are the user's `/compact` instructions
+(seen only by PreCompact) and the latest requests.
 
-Settings (environment): TRACEPACK_INJECT_BUDGET (tokens, default 1500; 0 turns injection off).
+Settings (environment):
+    TRACEPACK_NOTES=0            don't add the note-taking instructions
+    TRACEPACK_INJECT_BUDGET      tokens added after a compaction (default 2000; 0 turns the restore off)
+    TRACEPACK_USER_WORDS=0       restore records only, not the user's own words
 
 A hook must never break a session: every failure is logged to the data folder and the hook exits 0.
 """
@@ -42,14 +49,31 @@ def _state_path(kind: str, session_id: str) -> str:
     return os.path.join(d, "%s.json" % re.sub(r"[^0-9A-Za-z_-]", "_", session_id or "unknown"))
 
 
+NOTES = (
+    "TracePack notes: end the summary with a section titled \"Notes\" that lists, one per line, with the date "
+    "where the conversation shows one:\n"
+    "- every fact the user stated that could matter later: requirements, constraints, preferences, plans, "
+    "decisions, personal details, names, numbers, counts, amounts, dates, versions, paths, IDs, and anything "
+    "they asked you to remember;\n"
+    "- what you told the user that they may ask about again: recommendations, answers, names, lists and numbers;\n"
+    "- changes over time: when a value or plan changed, both the old and the new value, each with its date.\n"
+    "Copy values exactly as stated; do not round, merge or paraphrase them. Carry over every line of the "
+    "notes in any earlier summary above, updated where needed, instead of dropping lines to save space.")
+
+
+def notes_enabled() -> bool:
+    return os.environ.get("TRACEPACK_NOTES", "1") != "0"
+
+
 def pre_compact(event: dict) -> str:
+    """Record the /compact instructions; the returned text (printed) joins Claude Code's compaction prompt."""
     path = event.get("transcript_path") or ""
     rec = {"at": time.time(), "session_id": event.get("session_id"), "transcript_path": path,
            "trigger": event.get("trigger"), "custom_instructions": event.get("custom_instructions") or "",
-           "size": os.path.getsize(path) if path and os.path.isfile(path) else 0}
+           "size": os.path.getsize(path) if path and os.path.isfile(path) else 0, "notes": notes_enabled()}
     with open(_state_path("precompact", event.get("session_id") or ""), "w", encoding="utf-8") as fh:
         json.dump(rec, fh)
-    return ""
+    return NOTES if notes_enabled() else ""
 
 
 def session_start(event: dict, record: bool = True) -> str:
@@ -78,9 +102,11 @@ def session_start(event: dict, record: bool = True) -> str:
                                 max_mb=_int_env("TRACEPACK_MAX_MB", "CLAUDE_PLUGIN_OPTION_MAX_MB",
                                                 default=S.DEFAULT_MAX_MB))
     n = len(res.get("entries") or [])
+    n_sent = int(res.get("user_sentences") or 0)
     if record:
         meta = {"at": time.strftime("%Y-%m-%d %H:%M:%S"), "session_id": event.get("session_id"), "transcript": path,
-                "found": bool(res.get("found")), "records": n, "tokens": res.get("tokens"), "budget": budget,
+                "found": bool(res.get("found")), "records": n, "user_sentences": n_sent,
+                "user_messages": res.get("user_messages") or 0, "tokens": res.get("tokens"), "budget": budget,
                 "chars": len(res.get("text") or ""), "redacted": res.get("redacted", 0),
                 "trigger": pre.get("trigger"), "custom_instructions": pre.get("custom_instructions", ""),
                 "elapsed_ms": int((time.time() - t0) * 1000)}
@@ -93,9 +119,14 @@ def session_start(event: dict, record: bool = True) -> str:
             pass
     if not res.get("found"):
         return ""
+    what = []
+    if n_sent:
+        what.append("%d of your sentence%s" % (n_sent, "" if n_sent == 1 else "s"))
+    if n:
+        what.append("%d exact record%s" % (n, "" if n == 1 else "s"))
     return json.dumps({
-        "systemMessage": "TracePack restored %d exact record%s (%s tokens) from before the compaction · "
-                         "/tracepack:status" % (n, "" if n == 1 else "s", "{:,}".format(res.get("tokens") or 0)),
+        "systemMessage": "TracePack restored %s (%s tokens) from before the compaction · /tracepack:status" % (
+            " and ".join(what), "{:,}".format(res.get("tokens") or 0)),
         "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": res["text"]},
     }, ensure_ascii=False)
 

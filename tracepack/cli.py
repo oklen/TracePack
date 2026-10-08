@@ -9,6 +9,7 @@
     tracepack demo                                               # try it on a built-in example session
     tracepack doctor                                             # check the install end to end
     tracepack bench codememo --data <folder>                     # the evidence benchmark in the README
+    tracepack bench lme run --arms tracepack,codex --out <dir>    # LongMemEval with compaction (needs a model)
     tracepack mcp                                                # run the MCP server on stdio
 """
 from __future__ import annotations
@@ -199,8 +200,9 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--cwd", default="")
     d.set_defaults(fn=cmd_doctor)
 
-    bn = sub.add_parser("bench", help="run the CodeMemo evidence benchmark (see README, Benchmark)")
-    bn.add_argument("suite", choices=["codememo"])
+    bn = sub.add_parser("bench", help="benchmarks: codememo (evidence, no model) and lme (LongMemEval; "
+                                      "`tracepack bench lme --help`)")
+    bn.add_argument("suite", choices=["codememo", "lme"])
     bn.add_argument("--data", required=True, help="CodeMemo folder (project_*/questions.json + sessions/)")
     bn.add_argument("--budgets", default="1000,2000,4000")
     bn.add_argument("--json", default="")
@@ -217,6 +219,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:2] == ["bench", "lme"]:                 # its own sub-commands: download / run / report / bridge
+        from tracepack.bench import lme
+        return lme.main(argv[2:])
     p = build_parser()
     a = p.parse_args(argv)
     if not getattr(a, "fn", None):

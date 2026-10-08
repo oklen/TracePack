@@ -34,7 +34,7 @@ be re-read; it is not a general accuracy win, and this package does not claim on
 """
 from __future__ import annotations
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __all__ = ["pack", "make_condenser", "__version__"]
 
 _LINK_VALUES = True          # every published number ran with these two on

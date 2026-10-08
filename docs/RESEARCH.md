@@ -139,7 +139,9 @@ current one.
 ## The compaction study: what to keep when the context fills up
 
 These are pre-registered, paired comparisons against strong baselines only, run with our research
-harness. That harness is not part of this release. In each benchmark, "ours" applies the same idea:
+harness. Its LongMemEval part is in this release as `tracepack bench lme` ([BENCH_LME.md](BENCH_LME.md); prompts byte-identical to
+the study's, checked by tests; fed the study's verdicts, its report prints the table below), and the
+SWE-bench, BeyondSWE and LOCA parts are not. In each benchmark, "ours" applies the same idea:
 alongside the summary, carry forward verbatim the raw text that will be needed.
 - **LongMemEval:** a note-taking summary, capped at 0.15 × the window, plus the user's own messages,
   picked by content and kept verbatim, never rewritten, within 0.2 × the window.
@@ -169,6 +171,32 @@ alongside the summary, carry forward verbatim the raw text that will be needed.
   carrying the picked messages forward across compactions.
 - **The summary prompt mattered.** The first version reused a summary prompt written for coding
   tasks; replacing it with a note-taking prompt is worth +12.1.
+
+**The idea in the product: Claude Code with the plugin** (10-08, pre-registered, paired, same time window;
+480 LongMemEval-S questions at 32k, real Claude Code 2.1.294 driven by `tracepack bench lme`, DeepSeek-V4-Pro
+as the model for every arm because the study's reader was rate-limited that day; LongMemEval's judge prompts).
+
+| Arm | Accuracy | vs Claude Code [95% CI] |
+|---|---|---|
+| Claude Code + TracePack (notes + your words) | 75.8% | +43.7 [+39.0, +48.5] |
+| Claude Code + notes only | 70.2% | +38.1 [+33.1, +42.9] |
+| Claude Code + your words only | 53.8% | +21.7 [+17.3, +25.8] |
+| Claude Code | 32.1% | — |
+| harness: the study's method | 81.9% | |
+| harness: Codex's compaction | 68.1% | |
+
+- **Stock Claude Code keeps no user words verbatim, and its summary is written for coding.** The 9-section
+  prompt asks for the request, files, errors and next step. After three compactions of a personal-assistant
+  history, it answered "I don't have that information" to 271 of the 480 questions (80 with the plugin).
+- **No compaction collapsed in any Claude Code arm:** every summary was at least 1,500 characters.
+- **The reference answer is often still in context.** For the 299 questions with a short reference answer,
+  the answer string was in the plugin arm's final context in 183 cases (Claude Code alone: 123). It was in
+  the Notes section for 103 of them and in the restored words for 82.
+- **The plugin does not reach the harness method** (−6.0 [−10.0, −1.9] against it). The likely reason is
+  the size of the verbatim part: 2k tokens picked locally in the plugin, 6.5k picked by the model in the
+  harness.
+- **With the same model, the harness method beats Codex by +13.7 [+8.8, +18.5]**, against +17.5 with
+  the study's reader.
 
 Two findings from the same study:
 - **Re-reading has a cost even when it works.** In coding tasks the state lives in files, so
@@ -211,9 +239,9 @@ kind of dataset from your own sessions.
 Use it where a needed fact cannot be re-read (it was in a tool output that is gone, or only in the
 conversation); it is not a general accuracy gain, and this package does not claim one.
 
-**Not in this release:** our sessions and every file derived from them; the SWE-bench, BeyondSWE,
-LOCA and LongMemEval experiment harnesses, which depend on infrastructure we cannot publish; and our
-experiment notes. Comments in the code cite those notes (`RESULTS_*.md`, `PLAN_*.md`) as the
+**Not in this release:** our sessions and every file derived from them; the SWE-bench, BeyondSWE
+and LOCA experiment harnesses, which depend on infrastructure we cannot publish; and our experiment
+notes. (The LongMemEval harness is in: `tracepack bench lme`.) Comments in the code cite those notes (`RESULTS_*.md`, `PLAN_*.md`) as the
 provenance of a default or a test.
 
 ## License
