@@ -7,8 +7,6 @@
 ![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757.svg)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen.svg)
 
-Zefeng Cai · independent researcher
-
 ## Results
 
 ### Claude Code with TracePack: +43.7 points on LongMemEval
