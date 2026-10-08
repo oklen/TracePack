@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "TracePack"
+version = "0.1.0"
+description = "Turn an agent's execution trace into a budgeted, auditable evidence packet"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+# Deliberately empty.  The core path -- adapters, graph, router, closure, assembler, excerpter -- is
+# stdlib only, so installing this does not drag in a model stack.  The offline dense router uses
+# keyed BLAKE2b instead of an embedding model, which is what keeps it both dependency-free and
+# deterministic across processes (Python's builtin hash() is salted per process).
+dependencies = []
+
+[project.optional-dependencies]
+# The OpenHands condenser and the ContextWeaver port; both need a running model, and neither is
+# imported unless you call for it.
+openhands = ["openhands-sdk>=1.44; python_version>='3.12'"]
+llama-index = ["llama-index-core; python_version>='3.10'"]
+bm25 = ["rank_bm25"]
+# The evaluation reader (a local Hugging Face checkpoint) and the cluster-robust statistics.
+eval = ["torch", "transformers", "numpy"]
+test = ["pytest", "numpy"]
+
+[project.urls]
+Repository = "https://github.com/oklen/TracePack"
+
+[tool.setuptools]
+packages = [
+    "tracepack",
+    "tracepack.core",
+    "tracepack.adapters",
+    "tracepack.baselines",
+    "tracepack.condenser",
+    "tracepack.pilot",
+    "tracepack.examples",
+    "tracepack.eval",
+    "tracepack.profiler",
+]
+
+[tool.setuptools.package-data]
+"tracepack.condenser" = ["README.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tracepack/tests"]

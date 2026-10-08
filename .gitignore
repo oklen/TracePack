@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.DS_Store
+# your own traces, items, packets and model outputs
+data/
+out/
