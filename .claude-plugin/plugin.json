@@ -1,0 +1,13 @@
+{
+  "name": "tracepack",
+  "version": "0.2.0",
+  "description": "Exact recall after /compact: Claude gets back the precise command output, paths, numbers and instructions the summary dropped, verbatim and labelled with where they came from. Local, no model calls, no API keys.",
+  "author": {
+    "name": "Zefeng Cai",
+    "url": "https://github.com/oklen"
+  },
+  "homepage": "https://github.com/oklen/TracePack",
+  "repository": "https://github.com/oklen/TracePack",
+  "license": "MIT",
+  "keywords": ["compaction", "compact", "context", "memory", "recall", "transcript", "mcp"]
+}

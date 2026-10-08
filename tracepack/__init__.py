@@ -34,7 +34,7 @@ be re-read; it is not a general accuracy win, and this package does not claim on
 """
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = ["pack", "make_condenser", "__version__"]
 
 _LINK_VALUES = True          # every published number ran with these two on
@@ -42,22 +42,30 @@ _EVIDENCE_HOPS = 2
 
 
 def _adapter_for(trace):
-    """Pick the adapter without reading the disk twice, and without guessing for in-memory rows."""
+    """The adapter for a trace: OpenHands rows, a pi session, or (anything else) a Claude Code transcript.
+
+    In-memory rows are sniffed from their first row; paths go through the registry, which reads the
+    first line. (0.1.0 sent Claude Code transcripts to the pi adapter, which found no events.)
+    """
+    from tracepack.adapters.claude_code import ClaudeCodeAdapter
     from tracepack.adapters.openhands import OpenHandsAdapter
     from tracepack.adapters.pi import PiAdapter
-    fmt = None
-    if isinstance(trace, (list, tuple)) and trace and isinstance(trace[0], dict):
-        fmt = trace[0].get("tracepack_format")
+    from tracepack.adapters.registry import format_of
+    if isinstance(trace, (list, tuple)):
+        first = trace[0] if trace and isinstance(trace[0], dict) else {}
+        if first.get("tracepack_format") == "openhands":
+            fmt = "openhands"
+        elif first.get("type") == "session" and "version" in first:
+            fmt = "pi"
+        else:
+            fmt = "claude_code"
     else:
-        import json
-        from tracepack.adapters.base import open_trace
-        try:
-            with open_trace(trace) as fh:
-                fmt = (json.loads(fh.readline() or "{}") or {}).get("tracepack_format")
-        except Exception:
-            fmt = None
-    return OpenHandsAdapter(link_values=_LINK_VALUES) if fmt == "openhands" else PiAdapter(
-        link_values=_LINK_VALUES)
+        fmt = format_of(trace)
+    if fmt == "openhands":
+        return OpenHandsAdapter(link_values=_LINK_VALUES)
+    if fmt == "pi":
+        return PiAdapter(link_values=_LINK_VALUES)
+    return ClaudeCodeAdapter(link_values=_LINK_VALUES)
 
 
 def pack(trace, query: str, budget: int = 2048, k: int = 8, selection: str = "closure",

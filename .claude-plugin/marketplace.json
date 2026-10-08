@@ -1,0 +1,25 @@
+{
+  "name": "tracepack",
+  "owner": {
+    "name": "Zefeng Cai",
+    "url": "https://github.com/oklen"
+  },
+  "metadata": {
+    "description": "TracePack: exact recall for Claude Code after /compact"
+  },
+  "plugins": [
+    {
+      "name": "tracepack",
+      "source": "./",
+      "description": "Exact recall after /compact: the precise command output, paths, numbers and instructions the summary dropped, verbatim and labelled with where they came from. Local, no model calls.",
+      "version": "0.2.0",
+      "author": {
+        "name": "Zefeng Cai"
+      },
+      "homepage": "https://github.com/oklen/TracePack",
+      "license": "MIT",
+      "keywords": ["compaction", "context", "memory", "recall", "mcp"],
+      "category": "productivity"
+    }
+  ]
+}

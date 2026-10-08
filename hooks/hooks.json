@@ -1,0 +1,29 @@
+{
+  "description": "TracePack: note the /compact instructions, and right after a compaction add back the exact records the summary is likely to drop",
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/bin/tracepack.py", "hook", "pre-compact"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/bin/tracepack.py", "hook", "session-start"],
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

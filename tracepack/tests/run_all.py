@@ -73,6 +73,8 @@ CONTRACTS = {
     # the deliverable (PLAN_condenser.md §3): the part that runs inside somebody else's agent loop
     16: "condenser: every recipe default cites a reading; the >=2-hop gate decides the closure and never whether a packet is served; the corpus is the forgotten events only; recall is deterministic, inside budget, and cannot raise into the agent loop",
     # the baselines (PLAN_baselines.md): the arms a comparison is only honest if they hold
+    # the product (README): the Claude Code plugin
+    18: "plugin: recall serves only records that left the context, verbatim, labelled and inside the budget; the after-compaction hook adds the latest outputs under the 8,000-char cap and fails open; the MCP server speaks the protocol and binds to the calling session; credentials are masked",
     17: "baselines: the new arm builder is byte-identical to the published one for B and C; each factor bites; identifier chasing reads only retrieved text; ContextWeaver follows Algorithm 1 (BFS ancestry bounded by W, non-ancestors keep the action and lose the observation, warmup keeps everything); a dead analyzer collapses the ancestry instead of faking a recency window; graph construction cannot see an instruction issued later",
 }
 
