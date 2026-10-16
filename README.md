@@ -2,6 +2,31 @@
 
 **Compaction that keeps what you said. After `/compact`, the exact lines come back.**
 
+When Claude Code compacts a long session, the summary keeps the plan and drops the specifics: the
+exact error text, the path it created, the number a benchmark printed, the port you mentioned two
+hours ago. TracePack hands those back **verbatim** after every compaction, labelled with where each one
+came from, without calling a model or sending anything off your machine.
+
+<img src="assets/demo.gif" alt="The same session twice. Claude Code as shipped: after /compact it still knows the staging port but no longer has key087, because its summary kept that 120 keys were printed but not their values. With TracePack: the restore puts the user's sentences and the latest exact outputs back, and Claude answers both the port and key087." width="100%">
+
+<sub>Recorded live in Claude Code 2.1.301 (Sonnet 5.5). The same script runs twice, first in Claude Code as
+shipped, then with the plugin: a fact stated in chat, 400 lines of load-test logs, 120 random keys printed in
+full, `/compact`, then one question to answer without running or reading anything. Both summaries keep the
+port and drop the keys; with the plugin, the restored records still hold key087, and the answer matches the
+printed value.</sub>
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/results-dark.png"><img src="assets/results.png" alt="Results. LongMemEval-S chat histories compacted at 32k: Claude Code 32.1%, Claude Code with TracePack 75.8%, Codex's compaction 68.1%. CodeMemo coding sessions, answer's turn found within 2,000 tokens: TracePack 34.6%, BM25 34.0%, grep 13.7%, newest context 3.9%. SWE-bench Verified at 32k in the research harness: step-limit hits 19.2% to 8.4%, solved 46.7% to 50.0% (tied)." width="100%"></picture>
+
+`32% → 76%` Claude Code on LongMemEval-S compacted at 32k · `2.5×` the evidence grep finds in real Claude Code
+coding sessions (ties BM25, no model) · `−10.8 pts` step-limit hits on SWE-bench Verified (solve rate tied)
+
+```
+/plugin marketplace add oklen/TracePack
+/plugin install tracepack@tracepack
+```
+
+Agent memory series: [VeraKV](https://github.com/oklen/VeraKV) — what to hand the model · [Compute Globally, Materialize Locally](https://github.com/oklen/Compute-Globally-Materialize-Locally) — what survives eviction · [TracePack](https://github.com/oklen/TracePack) — what survives compaction
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)
 ![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757.svg)
@@ -111,15 +136,6 @@ back inside the budget. Run `tracepack bench codememo --data <CodeMemo folder>` 
 TracePack's defaults were chosen on the odd-numbered questions. On the held-out even-numbered half it
 ties BM25 on evidence (34.7% vs 34.7%) and leads on exact values (43% vs 40%). Full tables are in
 [Benchmark](#benchmark).
-
-When Claude Code compacts a long session, the summary keeps the plan and drops the specifics: the
-exact error text, the path it created, the number a benchmark printed, the port you mentioned two
-hours ago. TracePack hands those back **verbatim**, inside a token budget, and labels each one with
-where it came from.
-
-It reads the transcript Claude Code already keeps on disk. It makes no model calls of its own: the
-notes are written by Claude Code's own compaction. It needs no API key, runs no background process, and
-nothing leaves your machine.
 
 ## Install
 

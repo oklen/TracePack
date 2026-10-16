@@ -121,7 +121,7 @@ def session_start(event: dict, record: bool = True) -> str:
         return ""
     what = []
     if n_sent:
-        what.append("%d of your sentence%s" % (n_sent, "" if n_sent == 1 else "s"))
+        what.append("%d of your sentences" % n_sent)
     if n:
         what.append("%d exact record%s" % (n, "" if n == 1 else "s"))
     return json.dumps({

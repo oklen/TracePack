@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **README.** A demo recorded live in Claude Code, running the same session as shipped and with the plugin,
+  one figure with the results on chat histories, on coding sessions (CodeMemo) and on a coding agent
+  (SWE-bench Verified), and the install lines at the top.
+- **Restore banner.** It now reads "restored 1 of your sentences" instead of "1 of your sentence".
+- **docs/RESEARCH.md.** Per-question-type results for the Claude Code run, and the SWE-bench step analysis,
+  marked post-hoc.
+
 ## 0.4.0 — 2026-10-08
 
 Compaction that keeps what you said, built into the plugin, and the LongMemEval harness in the repo.

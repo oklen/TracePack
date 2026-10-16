@@ -172,6 +172,18 @@ alongside the summary, carry forward verbatim the raw text that will be needed.
 - **The summary prompt mattered.** The first version reused a summary prompt written for coding
   tasks; replacing it with a note-taking prompt is worth +12.1.
 
+**SWE-bench in detail** (242 checkpoints from 119 instances, four runs per checkpoint and arm, the same
+executor in both arms, a 64-step limit). Solved: 46.7% with OpenHands' own compaction and 50.0% with the
+forgotten file views put back (+3.3 [−1.4, +10.3], tied). Hit the step limit: 19.2% and 8.4% (−10.8
+[−18.6, −3.0]).
+
+*Steps, post-hoc and not pre-registered.* Steps after the checkpoint (model calls plus compactions, the
+count the step limit uses) fell 18.1% [−23.6%, −12.2%] over all 242 checkpoints (30.7 → 25.2), and
+10.5% [−15.5%, −6.1%] on the 66 instances not used to design the method (115 checkpoints). Tokens rose
+12.8%; wall time fell 5.8%, not significant. The drop in step-limit hits comes mostly from 7 long
+instances, 5 of which were among the instances the method was designed on; on the other instances,
+step-limit hits barely moved.
+
 **The idea in the product: Claude Code with the plugin** (10-08, pre-registered, paired, same time window;
 480 LongMemEval-S questions at 32k, real Claude Code 2.1.294 driven by `tracepack bench lme`, DeepSeek-V4-Pro
 as the model for every arm because the study's reader was rate-limited that day; LongMemEval's judge prompts).
@@ -184,6 +196,18 @@ as the model for every arm because the study's reader was rate-limited that day;
 | Claude Code | 32.1% | — |
 | harness: the study's method | 81.9% | |
 | harness: Codex's compaction | 68.1% | |
+
+Per question type (correct of n; the README's results figure draws these):
+
+| Question type | n | Claude Code | Claude Code + TracePack |
+|---|---|---|---|
+| single-session-user (facts you stated) | 67 | 41.8% (28) | 94.0% (63) |
+| single-session-preference | 28 | 25.0% (7) | 71.4% (20) |
+| single-session-assistant (what Claude told you) | 53 | 34.0% (18) | 58.5% (31) |
+| knowledge-update | 74 | 66.2% (49) | 87.8% (65) |
+| multi-session | 129 | 20.9% (27) | 72.9% (94) |
+| temporal-reasoning | 129 | 19.4% (25) | 70.5% (91) |
+| all | 480 | 32.1% (154) | 75.8% (364) |
 
 - **Stock Claude Code keeps no user words verbatim, and its summary is written for coding.** The 9-section
   prompt asks for the request, files, errors and next step. After three compactions of a personal-assistant
