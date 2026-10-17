@@ -7,15 +7,15 @@ exact error text, the path it created, the number a benchmark printed, the port 
 hours ago. TracePack hands those back **verbatim** after every compaction, labelled with where each one
 came from, without calling a model or sending anything off your machine.
 
-<img src="assets/demo.gif" alt="The same session twice, with the auto-compact window set to 100k tokens. A fact is stated in chat, 120 random keys are printed, then two large server logs fill the context and set off four automatic compactions. Claude Code as shipped keeps the port but not the keys: answering from what it has, it cannot give key087, and with tools allowed it finds key042 by searching its transcript. With TracePack the keys come back after every compaction, and Claude answers both questions directly. Cards quote the real summary and the real restore." width="100%">
+<img src="assets/demo.gif" alt="Side by side, in step: Claude Code as shipped on the left, Claude Code with TracePack on the right, running the same script with the auto-compact window set to 100k tokens. After a fact is stated, 120 random keys are printed and two large server logs set off four automatic compactions, the left session cannot give key087 from what it has and has to search its transcript for key042, while the right session answers both at once with no tool call. End cards quote the left session's summary and what TracePack put back; a last card sums up four runs." width="100%">
 
-<sub>Recorded live in Claude Code 2.1.302 (Sonnet 5.5); terminal parts play at 1.3× speed. The same script
-runs twice, first as shipped, then with the plugin, with the auto-compact window set to 100k tokens: a fact
-stated in chat, 120 random keys ("we'll need one later"), then two server logs of about 25k tokens each, which
-set off four automatic compactions. Asked to answer only from what it has, Claude Code as shipped knows the port
-but not key087. Allowed any tool, it finds key042 by searching its transcript (its 21 s include a compaction
-that started with that question). With TracePack, both answers come from the restored records, with no tool
-call. The cards quote the real summary and the real restore, and every answer matches the printed value.</sub>
+<sub>Recorded live in Claude Code 2.1.302 (Sonnet 5.5): the same script in two sessions, as shipped (left) and
+with TracePack (right), with the auto-compact window set to 100k tokens. Waiting for the model is cut and both
+panes play at 1.3× speed, so they stay in step. This is run 3 of 4. Across the four runs, Claude Code as shipped
+answered key087 from what it had once (that run's summary happened to keep the keys), and in the other three it
+found key042 only by searching its transcript (24 s, 22 s and 5 s). With TracePack, all four runs answered both
+at once, with no tool call: its restore put the full key list back after every compaction. The end cards quote
+the real summary and the real restore, and every answer matches the printed value. Click to view full size.</sub>
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/results-dark.png"><img src="assets/results.png" alt="Results. LongMemEval-S chat histories compacted at 32k: Claude Code 32.1%, Claude Code with TracePack 75.8%, Codex's compaction 68.1%. CodeMemo coding sessions, answer's turn found within 2,000 tokens: TracePack 34.6%, BM25 34.0%, grep 13.7%, newest context 3.9%. SWE-bench Verified at 32k in the research harness: step-limit hits 19.2% to 8.4%, solved 46.7% to 50.0% (tied)." width="100%"></picture>
 
