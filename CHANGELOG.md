@@ -8,6 +8,10 @@
 - **Restore banner.** It now reads "restored 1 of your sentences" instead of "1 of your sentence".
 - **docs/RESEARCH.md.** Per-question-type results for the Claude Code run, and the SWE-bench step analysis,
   marked post-hoc.
+- **Install in one command.** The README now also gives `/plugin install tracepack --marketplace oklen/TracePack`
+  (Claude Code 2.1.275 or later).
+- **Privacy.** The README says which code goes online: only the benchmark and research code, and only when you
+  run it. The plugin's hooks and MCP server make no network calls.
 
 ## 0.4.0 — 2026-10-08
 

@@ -148,6 +148,13 @@ In Claude Code:
 /plugin install tracepack@tracepack
 ```
 
+On Claude Code 2.1.275 or later, one command does both (`claude plugin install` with the same arguments
+does it from a shell on 2.1.292 or later):
+
+```
+/plugin install tracepack --marketplace oklen/TracePack
+```
+
 Then restart Claude Code, or run `/reload-plugins`. Check that it works with `/tracepack:status`.
 
 It needs Python 3.9 or newer on your `PATH` as `python3`. macOS and most Linux distributions already
@@ -270,6 +277,10 @@ re-reading isn't an option; see [the research notes](docs/RESEARCH.md).
 - **Local only.** It reads files on your machine and writes a few small JSON files to the plugin's
   data folder (`~/.claude/plugins/data/tracepack…`). It makes no network calls, collects no
   telemetry and calls no model.
+- **The research code goes online only when you run it.** This repository also holds the benchmark
+  and research code (`tracepack bench` and the `eval`, `pilot`, `profiler` and `baselines` folders).
+  `tracepack bench lme download` fetches LongMemEval from Hugging Face, and the benchmarks that need
+  a model call the endpoint you configure. The plugin's hooks and MCP server never run any of it.
 - **Cost.** The only cost is the tokens it adds: the notes in each compaction summary, and at most
   ~2,000 tokens after each compaction. Nothing otherwise. Tool outputs from `recall` are sized by
   the budget Claude asks for.
