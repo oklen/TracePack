@@ -1,0 +1,31 @@
+{
+  "name": "tracepack",
+  "owner": {
+    "name": "Zefeng Cai",
+    "url": "https://github.com/oklen"
+  },
+  "metadata": {
+    "description": "TracePack: compaction that keeps what you said, for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "tracepack",
+      "source": "./",
+      "description": "Compaction that keeps what you said: dated notes of every stated fact in Claude Code's summary, then your own words and the exact outputs it dropped, verbatim. Local, no model calls.",
+      "version": "0.4.1",
+      "author": {
+        "name": "Zefeng Cai"
+      },
+      "homepage": "https://github.com/oklen/TracePack",
+      "license": "MIT",
+      "keywords": [
+        "compaction",
+        "context",
+        "memory",
+        "recall",
+        "mcp"
+      ],
+      "category": "productivity"
+    }
+  ]
+}
