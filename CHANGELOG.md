@@ -1,7 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 — 2026-10-19
 
+Ready for Anthropic's plugin directory: a branch that holds only the plugin, and the fixes listed below.
+
+- **A `plugin` branch for the directory.** `scripts/build_plugin_branch.py` builds a branch with only what the
+  plugin runs (the hooks, the MCP server, the commands and the modules they import) plus the README, the
+  license and this changelog, so a directory listing and its scans see the plugin and not the research code.
+  It commits locally and never pushes.
+- **Display name.** `plugin.json` sets `displayName` to "TracePack".
+- **Tests.** The redaction test assembles its fake credentials at run time, so no file in the repository holds
+  a string that looks like an OpenAI, GitHub or AWS key.
 - **README.** A demo recorded live in Claude Code, running the same session as shipped and with the plugin,
   one figure with the results on chat histories, on coding sessions (CodeMemo) and on a coding agent
   (SWE-bench Verified), and the install lines at the top.
