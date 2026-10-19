@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Putting back the forgotten file views, for OpenHands.** `tracepack.condenser.oh_keep.KeepCondenser` is
+  the component the SWE-bench comparison measured: after each compaction it puts the agent's own forgotten
+  file views back after the summary, verbatim (at most 4 files and 32,000 characters, only files the
+  summary names and that were not edited since). On SWE-bench Verified it cut step-limit hits from 19.2%
+  to 8.4% and re-compactions from 2.86 to 1.63 per run; the solve rate did not move. The rule is
+  `tracepack.condenser.keep` (stdlib only, contract #21); it returns exactly what the measured
+  implementation did at all 646 compactions of the study's 249 checkpoint prefixes. The plugin is
+  unchanged, and the `plugin` branch does not include these modules.
+
 ## 0.4.1 — 2026-10-19
 
 Ready for Anthropic's plugin directory: a branch that holds only the plugin, and the fixes listed below.

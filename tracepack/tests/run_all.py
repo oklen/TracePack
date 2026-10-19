@@ -79,6 +79,8 @@ CONTRACTS = {
     # 0.4.0: note-taking compaction in the plugin, and the LongMemEval harness in the repo
     19: "compaction notes: PreCompact prints the note-taking instructions (nothing when off); the restore brings back the user's own sentences verbatim, dated, picked by content, inside the budget and the char cap, and leaves room for tool records",
     20: "bench lme: every prompt and judge template is byte-identical to the study's; each arm compacts as declared; the bootstrap is the study's; the Claude Code bridge keeps text and roles; the driver reads back what a compaction left",
+    # the SWE-bench keep arm (PREREG_keep.md): the agent's own forgotten file views, put back
+    21: "keep: only forgotten file views come back, the latest per file, never one edited since (editor or terminal), never a directory listing, an oversize view or a file the summary does not name; newest first inside the file and character caps; a kept view brings its whole model response; the rule is pure and every constant cites a reading",
 }
 
 _CONTRACT_RE = re.compile(r"Contract(\d{1,2})")

@@ -147,7 +147,10 @@ alongside the summary, carry forward verbatim the raw text that will be needed.
   picked by content and kept verbatim, never rewritten, within 0.2 × the window.
 - **LOCA and BeyondSWE:** after a reset, the latest read-type tool outputs are put back (≤ 8k tokens,
   ≤ 3k each).
-- **SWE-bench:** after each compaction, the file views that were forgotten are put back.
+- **SWE-bench:** after each compaction, the file views that were forgotten are put back. The
+  component ships as `tracepack.condenser.oh_keep` (an OpenHands condenser; the rule itself is
+  `tracepack.condenser.keep`, see [its README section](../tracepack/condenser/README.md#putting-back-the-forgotten-file-views-oh_keep));
+  the harness that ran the comparison does not.
 
 | Benchmark · setting | Strong baseline | Ours − baseline [95% CI] | Reading |
 |---|---|---|---|
@@ -265,8 +268,9 @@ conversation); it is not a general accuracy gain, and this package does not clai
 
 **Not in this release:** our sessions and every file derived from them; the SWE-bench, BeyondSWE
 and LOCA experiment harnesses, which depend on infrastructure we cannot publish; and our experiment
-notes. (The LongMemEval harness is in: `tracepack bench lme`.) Comments in the code cite those notes (`RESULTS_*.md`, `PLAN_*.md`) as the
-provenance of a default or a test.
+notes. (The LongMemEval harness is in: `tracepack bench lme`. The component the SWE-bench comparison
+measured is in too: `tracepack.condenser.oh_keep`.) Comments in the code cite those notes (`RESULTS_*.md`,
+`PLAN_*.md`, `PREREG_*.md`) as the provenance of a default or a test.
 
 ## License
 

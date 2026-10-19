@@ -6,6 +6,9 @@
   runs (and is contract-tested) on python 3.9 with no third-party dependency.
 * :mod:`tracepack.condenser.oh_condenser` is the OpenHands SDK binding -- the harness the read-out
   numbers were measured on.  It needs python >= 3.12 and `openhands-sdk`, so it is imported lazily.
+* :mod:`tracepack.condenser.keep` / :mod:`tracepack.condenser.oh_keep` are a second, separate
+  component: after each compaction, put the agent's own forgotten file views back (the SWE-bench
+  "keep" arm, `PREREG_keep.md`).  Same split: the rule is stdlib-only, the binding needs the SDK.
 
 Scope, stated up front because it is part of the claim (`REPORT_abstract` §3 conclusion three):
 this helps when the harness's summary drops values or the source disappears, AND the record you need
