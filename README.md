@@ -1,202 +1,144 @@
 # TracePack
 
-**Compaction that keeps what you said. After `/compact`, the exact lines come back.**
+**中文** | [English](README.en.md)
 
-When Claude Code compacts a long session, the summary keeps the plan and drops the specifics: the
-exact error text, the path it created, the number a benchmark printed, the port you mentioned two
-hours ago. TracePack hands those back **verbatim** after every compaction, labelled with where each one
-came from, without calling a model or sending anything off your machine.
+**compaction 时不丢你说过的话。`/compact` 之后，原文一字不差地回来。**
 
-<img src="assets/demo.gif" alt="Side by side, in step: Claude Code as shipped on the left, Claude Code with TracePack on the right, running the same script with the auto-compact window set to 100k tokens. After a fact is stated, 120 random keys are printed and two large server logs set off four automatic compactions, the left session cannot give key087 from what it has and has to search its transcript for key042, while the right session answers both at once with no tool call. End cards quote the left session's summary and what TracePack put back; a last card sums up four runs." width="100%">
+Claude Code 对长会话做 compaction 时，summary 会留下计划、丢掉细节：确切的报错原文、它创建的路径、benchmark 打印出来的数字、你两小时前提到的端口。TracePack 在每次 compaction 之后把这些内容**原样**放回去，并标明每一条出自哪里；整个过程不调用模型，也不把任何东西发出你的机器。
 
-<sub>Recorded live in Claude Code 2.1.302 (Sonnet 5.5): the same script in two sessions, as shipped (left) and
-with TracePack (right), with the auto-compact window set to 100k tokens. Waiting for the model is cut and both
-panes play at 1.3× speed, so they stay in step. This is run 3 of 4. Across the four runs, Claude Code as shipped
-answered key087 from what it had once (that run's summary happened to keep the keys), and in the other three it
-found key042 only by searching its transcript (24 s, 22 s and 5 s). With TracePack, all four runs answered both
-at once, with no tool call: its restore put the full key list back after every compaction. The end cards quote
-the real summary and the real restore, and every answer matches the printed value. Click to view full size.</sub>
+<img src="assets/demo.gif" alt="左右并排、同步播放：左边是原版 Claude Code，右边装了 TracePack，两边跑同一个脚本，auto-compact 窗口设为 100k token。先在聊天里说一个事实，然后打印 120 个随机 key，再读两份很大的 server log，触发四次自动 compaction。之后左边的会话凭手上已有的内容答不出 key087，只能翻 transcript 去找 key042；右边的会话两题都立刻答出，不调用任何工具。结尾的卡片引用了左边会话的 summary 和 TracePack 放回的内容，最后一张卡片汇总了四次运行。" width="100%">
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="assets/results-dark.png"><img src="assets/results.png" alt="Results. LongMemEval-S chat histories compacted at 32k: Claude Code 32.1%, Claude Code with TracePack 75.8%, Codex's compaction 68.1%. CodeMemo coding sessions, answer's turn found within 2,000 tokens: TracePack 34.6%, BM25 34.0%, grep 13.7%, newest context 3.9%. SWE-bench Verified at 32k in the research harness: step-limit hits 19.2% to 8.4%, solved 46.7% to 50.0% (tied)." width="100%"></picture>
+<sub>在 Claude Code 2.1.302（Sonnet 5.5）里实录：同一个脚本跑在两个会话里，左边是原版，右边装了 TracePack，auto-compact 窗口都设为 100k token。等模型的时间剪掉了，两边都按 1.3 倍速播放，所以保持同步。这是 4 次运行中的第 3 次。4 次里，原版 Claude Code 只有一次凭手上已有的内容答出了 key087（那次的 summary 恰好保留了这些 key），另外三次都要搜 transcript 才找到 key042（分别用了 24 秒、22 秒和 5 秒）。装了 TracePack 的 4 次都是两题立刻答出，不调用任何工具：每次 compaction 之后，它都把完整的 key 列表放了回去。结尾的卡片引用的是真实的 summary 和真实 restore 的内容，每个答案都和打印出来的值一致。点击可以看大图。</sub>
 
-`32% → 76%` Claude Code on LongMemEval-S compacted at 32k · `2.5×` the evidence grep finds in real Claude Code
-coding sessions (ties BM25, no model) · `−10.8 pts` step-limit hits on SWE-bench Verified (solve rate tied)
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/results-zh-dark.png"><img src="assets/results-zh.png" alt="结果。LongMemEval-S 对话历史，到 32k 就 compaction：Claude Code 32.1%，装了 TracePack 的 Claude Code 75.8%，Codex 的 compaction 68.1%。CodeMemo coding session，2,000 token 内召回答案所在的 turn：TracePack 34.6%，BM25 34.0%，grep 13.7%，最新的 context 3.9%。研究 harness 里的 SWE-bench Verified，32k：撞 step limit 从 19.2% 降到 8.4%，resolve rate 从 46.7% 到 50.0%（持平）。" width="100%"></picture>
+
+`32% → 76%`：在 LongMemEval-S 上、到 32k 就 compaction 时，Claude Code 的准确率 · `2.5×`：在真实的 Claude Code coding session 里，召回的 evidence 是 grep 的 2.5 倍（和 BM25 打平，不用模型） · `−10.8 pp`：SWE-bench Verified 上撞 step limit 的比例（resolve rate 持平）
 
 ```
 /plugin marketplace add oklen/TracePack
 /plugin install tracepack@tracepack
 ```
 
-Agent memory series: [VeraKV](https://github.com/oklen/VeraKV) — what to hand the model · [Compute Globally, Materialize Locally](https://github.com/oklen/Compute-Globally-Materialize-Locally) — what survives eviction · [TracePack](https://github.com/oklen/TracePack) — what survives compaction
+Agent memory 系列：[VeraKV](https://github.com/oklen/VeraKV)：该把什么交给模型 · [Compute Globally, Materialize Locally](https://github.com/oklen/Compute-Globally-Materialize-Locally)：evict 之后什么还在 · [TracePack](https://github.com/oklen/TracePack)：compaction 之后什么还在
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)
-![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757.svg)
-![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg) ![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757.svg) ![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen.svg)
 
-## Results
+## 结果
 
-### Claude Code with TracePack: +43.7 points on LongMemEval
+### 装上 TracePack 的 Claude Code：LongMemEval 上 +43.7 个点
 
-Real Claude Code (2.1.294) answered the same 480 LongMemEval-S questions twice, once as shipped and once
-with this plugin. For each question:
-- the history (about 50 chat sessions, ~115k tokens) is replayed into a Claude Code session;
-- whenever the conversation passes 32k tokens, it is compacted with `/compact` (three times for nearly
-  every question);
-- the question is then answered from what is left, with no tools.
+真实的 Claude Code（2.1.294）把同样 480 道 LongMemEval-S 题答了两遍，一遍原版，一遍装了这个插件。每道题：
+- 把历史（约 50 个对话 session，~115k token）replay 进一个 Claude Code 会话；
+- 对话每超过 32k token，就用 `/compact` 压缩一次（几乎每道题都 compact 三次）；
+- 然后只凭剩下的内容作答，不用工具。
 
-Every arm used the same model (DeepSeek-V4-Pro, through the built-in bridge) and the same compaction
-points. LongMemEval's official prompts graded the answers.
+每个 arm 都用同一个模型（DeepSeek-V4-Pro，通过内置的 bridge）和同样的 compaction 时机，答案用 LongMemEval 官方的 prompt 评分。
 
-| 480 questions, same model | Accuracy |
+| 480 题，同一个模型 | 准确率 |
 |---|---|
 | **Claude Code + TracePack** | **75.8%** |
-| Claude Code + TracePack, notes only | 70.2% |
-| Claude Code + TracePack, your words only | 53.8% |
+| Claude Code + TracePack，只用 notes | 70.2% |
+| Claude Code + TracePack，只放回你的原话 | 53.8% |
 | Claude Code | 32.1% |
-| *Reference: Codex's compaction* | *68.1%* |
+| *参考：Codex 的 compaction* | *68.1%* |
 
-- **+43.7 points, 95% CI [+39.0, +48.5].** It wins 219 questions and loses 9, and it is higher on all
-  six question types: multi-session 21% → 73%, temporal reasoning 19% → 71%, facts the user stated
-  42% → 94%.
-- **Both halves pay on their own.** The dated notes add +38.1. Restoring your words adds +21.7.
-- **Why stock Claude Code loses so much here.** Its compaction prompt is written for coding: request,
-  files, errors, next step. After three compactions most personal facts are gone, and it answered
-  "I don't have that information" to 271 of the 480 questions (80 with TracePack). Unlike Codex, it
-  keeps none of your messages verbatim.
-- **What it costs:** summaries about 45% longer (median 5.5k vs 3.8k tokens), plus about 2.2k tokens
-  restored after each compaction.
-- **What is still left.** The study's own method, run in the harness with the same model, scores
-  81.9%. Its verbatim part is three times larger (6.5k tokens, picked by the model), against the
-  plugin's 2k tokens picked locally.
+- **+43.7 个点，95% CI [+39.0, +48.5]。** 赢 219 题、输 9 题，六种题型全部更高：multi-session 21% → 73%，temporal reasoning 19% → 71%，用户说过的事实 42% → 94%。
+- **两部分各自都有用。** 带日期的 notes 带来 +38.1，放回你的原话带来 +21.7。
+- **为什么原版 Claude Code 在这里输这么多。** 它的 compaction prompt 是为写代码设计的：需求、文件、报错、下一步。compact 三次之后，大部分个人信息都没了，480 题里有 271 题它回答「I don't have that information」（装了 TracePack 是 80 题）。和 Codex 不同，它不会原样保留你的任何一条消息。
+- **代价：** summary 长约 45%（中位数 5.5k vs 3.8k token），每次 compaction 后再加约 2.2k token 的 restore 内容。
+- **还剩多少空间。** 研究里的方法在同一 harness、同一模型下得 81.9%。它原样保留的部分大三倍（6.5k token，由模型挑选），插件是在本地挑的 2k token。
 
-This setting is deliberately hard: a 32k window forces three compactions of a 115k-token history. Claude
-Code's real window is 200k, so this happens only in much longer sessions. Two more things differ from
-everyday use:
-- the model is DeepSeek-V4-Pro, not Claude;
-- Claude Code shows the model the machine's date, while each question states its own date.
+这个设置是故意设难的：32k 的窗口逼着 115k token 的历史 compact 三次。Claude Code 实际的窗口是 200k，所以只有长得多的会话才会遇到这种情况。和日常使用相比还有两点不同：
+- 模型是 DeepSeek-V4-Pro，不是 Claude；
+- Claude Code 会把机器上的日期告诉模型，而每道题有自己的日期。
 
-Reproduce it with `tracepack bench lme run --arms claude-code,claude-code+tracepack`
-([how](docs/BENCH_LME.md)).
+用 `tracepack bench lme run --arms claude-code,claude-code+tracepack` 复现（[方法](docs/BENCH_LME.md)）。
 
-### Compaction that keeps what can't be re-read: +17.5 points over Codex
+### 保住没法重读的东西：比 Codex 高 17.5 个点
 
-When the context fills up, Codex's compaction writes a hand-off summary of the task's progress and
-bets that the agent can re-read any detail later. That works for files. It fails for what the user
-said, which exists nowhere else: Codex's hand-off summary kept the needed fact in 4 of the 305
-cases where it was on screen.
+context 满了的时候，Codex 的 compaction 会写一份任务进展的 hand-off summary，赌的是 agent 之后能重新读到任何细节。对文件来说这行得通；对用户说过的话就不行，因为这些话别处都没有：在需要的事实就在屏幕上的 305 个 case 里，Codex 的 hand-off summary 只保留了 4 个。
 
-The TracePack study keeps those facts explicitly. A note-taking summary is paired with the user's own
-messages, picked by content and kept verbatim, never rewritten. On **LongMemEval-S** (long dialogues,
-histories of about 115k tokens), with a 32k window so that each question's history is compacted about
-three times:
+TracePack 的研究方案专门保留这些事实：一份 note-taking 式的 summary，配上用户自己的消息，消息按内容挑选、原样保留，从不改写。在 **LongMemEval-S**（长对话，历史约 115k token）上，用 32k 的窗口，每道题的历史大约被 compact 三次：
 
-| 480 questions, same time window, same reader | Accuracy |
+| 480 题，同样的 time window，同样的 reader | 准确率 |
 |---|---|
-| **TracePack's compaction** (note-taking summary + the user's words, kept verbatim) | **86.0%** |
-| Codex's compaction (re-implemented from Codex's source) | 68.5% |
+| **TracePack 的 compaction**（note-taking summary + 用户原话，原样保留） | **86.0%** |
+| Codex 的 compaction（按 Codex 源码重新实现） | 68.5% |
 
-- **+17.5 points, 95% CI [+13.3, +21.7].** It is higher on all six question types, and **+19.3 on
-  280 fresh questions**.
-- **The same budget spent only on a note-taking summary ties it** (+1.0 [−2.3, +4.2]). TracePack
-  generates 30% fewer tokens for that result.
-- **On SWE-bench Verified (32k)**, putting forgotten file views back after each compaction makes the
-  agent hit the step limit **10.8 points less often** than OpenHands' own compaction (−10.8
-  [−18.6, −3.0]). The solve rate is tied.
+- **+17.5 个点，95% CI [+13.3, +21.7]。** 六种题型全部更高，在 **280 道新题上 +19.3**。
+- **同样的 budget 全花在 note-taking summary 上，和它打平**（+1.0 [−2.3, +4.2]）。TracePack 拿到这个结果时少生成 30% 的 token。
+- **在 SWE-bench Verified（32k）上**，每次 compaction 后把被丢掉的 file view 放回去，agent 撞 step limit 的情况比 OpenHands 自带的 compaction **少 10.8 个点**（−10.8 [−18.6, −3.0]）。resolve rate 持平。
 
-These are pre-registered, paired runs from our research harness. Its LongMemEval part is now in this
-repository as `tracepack bench lme`: the prompts are byte-identical to the study's, and fed the study's
-verdicts, its report prints this table. Re-run with DeepSeek-V4-Pro as the model, the same method beats
-Codex's compaction by +13.7 [+8.8, +18.5]. Details and the other benchmarks are in
-[the research notes](docs/RESEARCH.md).
+这些是我们研究 harness 里 pre-registered 的 paired 运行。其中 LongMemEval 部分现在以 `tracepack bench lme` 的形式放在本仓库：prompt 和研究里的逐字节一致，喂入研究里的 verdict，它的 report 就会打出这张表。换成 DeepSeek-V4-Pro 当模型重跑，同样的方法比 Codex 的 compaction 高 +13.7 [+8.8, +18.5]。细节和其他 benchmark 见 [research notes](docs/RESEARCH.md)。
 
-### Recall after compaction: 2.5× more of the right lines than grep
+### compaction 之后的 recall：召回的正确内容是 grep 的 2.5 倍
 
-On **CodeMemo**, a public benchmark of 153 questions over 66 real Claude Code sessions (up to 430 MB of
-history per project), this is how often the turns that hold the answer come back, verbatim, within
-the same 2,000-token budget:
+**CodeMemo** 是一个公开 benchmark，在 66 个真实的 Claude Code 会话上出了 153 道题（每个项目最多 430 MB 的历史）。下面是在同样 2,000 token 的 budget 内，包含答案的那个 turn 被原样召回的比例：
 
-| Within 2,000 tokens | Answer's turn delivered | Exact value delivered |
+| 2,000 token 以内 | 召回答案所在的 turn | 召回确切的值 |
 |---|---|---|
 | **TracePack** | **34.6%** | **47%** |
-| Grep over the transcript (what Claude does without it) | 13.7% | 17% |
-| What's still in context (the newest 2,000 tokens) | 3.9% | 12% |
-| *Reference: a BM25 search engine over messages* | *34.0%* | *47%* |
+| grep transcript（没有它时 Claude 的做法） | 13.7% | 17% |
+| 还留在 context 里的（最新的 2,000 token） | 3.9% | 12% |
+| *参考：基于消息的 BM25 搜索引擎* | *34.0%* | *47%* |
 
-- **2.5× the evidence and 2.8× the exact values of grepping the transcript**, and about 9× what
-  is still in context.
-- **4.7× on debugging history.** For "how did we diagnose and fix X" questions it is 48%, against 10%
-  for grep.
-- **As good as a BM25 search engine, and packaged for an agent.** Whole records, each labelled with
-  tool, time and transcript line; a call with its short output; a hard budget.
-- **No model, no network.** About 0.4 s per question over histories of up to 52,000 records.
-- **Works live in Claude Code.** A random key printed before `/compact` came back exactly, in one
-  turn, without re-running anything.
+- **evidence 是 grep transcript 的 2.5 倍，确切的值是 2.8 倍**，大约是 context 里剩下内容的 9 倍。
+- **在 debug 历史上是 4.7 倍。** 对「我们当时是怎么定位和修好 X 的」这类题，它是 48%，grep 是 10%。
+- **和 BM25 搜索引擎一样好，而且是为 agent 打包好的。** 每条都是完整的 record，标明 tool、时间和 transcript 里的行号；tool call 会带上它简短的输出；有硬性的 budget 上限。
+- **不用模型，不联网。** 在最多 52,000 条 record 的历史上，每题约 0.4 秒。
+- **在 Claude Code 里实际可用。** `/compact` 之前打印的一个随机 key，一轮之内原样回来，不需要重新运行任何东西。
 
-The test is model-free and deterministic: the turns CodeMemo marks as each answer's evidence have to come
-back inside the budget. Run `tracepack bench codememo --data <CodeMemo folder>` to reproduce it.
-TracePack's defaults were chosen on the odd-numbered questions. On the held-out even-numbered half it
-ties BM25 on evidence (34.7% vs 34.7%) and leads on exact values (43% vs 40%). Full tables are in
-[Benchmark](#benchmark).
+这个测试不用模型、结果确定：CodeMemo 标为每道题 evidence 的那几个 turn，必须在 budget 内被召回。运行 `tracepack bench codememo --data <CodeMemo 目录>` 即可复现。TracePack 的默认设置是在奇数编号的题上选的；在 held-out 的偶数编号那一半上，evidence 和 BM25 打平（34.7% vs 34.7%），确切的值领先（43% vs 40%）。完整的表见 [Benchmark](#benchmark)。
 
-## Install
+## 安装
 
-In Claude Code:
+在 Claude Code 里：
 
 ```
 /plugin marketplace add oklen/TracePack
 /plugin install tracepack@tracepack
 ```
 
-On Claude Code 2.1.275 or later, one command does both (`claude plugin install` with the same arguments
-does it from a shell on 2.1.292 or later):
+Claude Code 2.1.275 及以上，一条命令就能完成这两步（2.1.292 及以上，也可以在 shell 里用 `claude plugin install` 加同样的参数）：
 
 ```
 /plugin install tracepack --marketplace oklen/TracePack
 ```
 
-Then restart Claude Code, or run `/reload-plugins`. Check that it works with `/tracepack:status`.
+然后重启 Claude Code，或者运行 `/reload-plugins`。用 `/tracepack:status` 检查是否正常。
 
-It needs Python 3.9 or newer on your `PATH` as `python3`. macOS and most Linux distributions already
-have it. Nothing else gets installed.
+需要 `PATH` 里有 Python 3.9+，命令名 `python3`。macOS 和大多数 Linux 发行版都自带。不会装其他任何东西。
 
-## Try it in 60 seconds
+## 60 秒上手
 
-1. Ask Claude to run this, then reply "done":
-   `python3 -c "import secrets; [print('key%02d' % i, secrets.token_hex(8)) for i in range(30)]"`
-2. Run `/compact`.
-3. Ask: *"What was key17? Don't run anything."*
+1. 让 Claude 运行下面这行，然后回复「done」：
+   ```
+   python3 -c "import secrets; [print('key%02d' % i, secrets.token_hex(8)) for i in range(30)]"
+   ```
+2. 运行 `/compact`。
+3. 问：*「key17 是多少？什么都别运行。」*
 
-Random keys cannot be regenerated, so only the original output has the answer. Right after the
-compaction you see *TracePack restored N exact records*, and `/tracepack:last` shows exactly what was
-put back. Claude then answers from the restored output in one turn, without re-running anything.
+随机生成的 key 没法再生成一遍，所以只有原始输出里有答案。compaction 一结束你就会看到 *TracePack restored N exact records*，`/tracepack:last` 会显示具体放回了什么。然后 Claude 在一轮之内根据 restore 的输出作答，不重新运行任何东西。
 
-In a session this short, Claude Code's own summary may keep the keys as well. The difference shows in
-long sessions, where the summary has to drop most outputs. There, Claude would otherwise re-run the
-command (and get different keys) or grep its own transcript file.
+在这么短的会话里，Claude Code 自己的 summary 也可能保留这些 key。差别出现在长会话里，那时 summary 不得不丢掉大部分输出。没有 TracePack 时，Claude 只能重新运行命令（得到另一组 key），或者 grep 它自己的 transcript 文件。
 
-## What you get
+## 你能得到什么
 
-- **Claude Code's compaction keeps notes.** Every compaction, manual or automatic, also writes a
-  dated "Notes" section: one line per fact you stated (requirements, constraints, preferences, names,
-  numbers, paths, versions), per answer Claude gave you, and per change, with the old and new value.
-  Values are copied as stated, and notes carry over from one compaction to the next.
-- **Your own words come back after every compaction.** Within ~2,000 tokens, TracePack adds back:
-  - your sentences that state facts, picked by content from everything you said, verbatim and dated;
-  - the latest tool outputs;
-  - the records your `/compact` instructions and recent requests point at.
+- **Claude Code 的 compaction 会写 notes。** 每次 compaction（手动或自动）都会额外写一个带日期的「Notes」小节：你说过的每个事实（需求、约束、偏好、名字、数字、路径、版本）、Claude 给你的每个回答、每处改动（连同旧值和新值），各占一行。值按原话照抄，notes 会从一次 compaction 延续到下一次。
+- **每次 compaction 之后，你自己的话会回来。** 在约 2,000 token 以内，TracePack 会放回：
+  - 你说过的陈述事实的句子，从你说过的全部话里按内容挑选，原样保留并带日期；
+  - 最新的 tool output；
+  - 你的 `/compact` 指令和最近的请求所指向的 record。
 
-  They come in the order they happened. Each is labelled, e.g. `Bash output of \`pytest -q\` · 10-08 13:14 · L22`.
-- **A `recall` tool** for anything else from before the compaction. Claude asks in plain words
-  (*"exact error from the last pytest run"*, *"the DB port the user gave"*) and gets verbatim records
-  under a budget, each labelled with the call that produced it.
-- **An `expand` tool** for the full text of one long record, page by page.
-- **Commands:**
-  - `/tracepack:recall <question>`
+  它们按发生的先后排列，每条都有标签，例如 `Bash output of \`pytest -q\` · 10-08 13:14 · L22`。
+- **一个 `recall` 工具**，用来找 compaction 之前的其他任何内容。Claude 用大白话提问（*「上一次 pytest 的确切报错」*、*「用户给的数据库端口」*），拿到 budget 以内的原样 record，每条标明是哪次 tool call 产生的。
+- **一个 `expand` 工具**，分页查看某一条长 record 的全文。
+- **命令：**
+  - `/tracepack:recall <问题>`
   - `/tracepack:status`
-  - `/tracepack:last`, which shows exactly what was added after the last compaction.
+  - `/tracepack:last`，显示上一次 compaction 之后具体加了什么。
 
-This is what Claude sees after a compaction (the built-in demo session; run `tracepack demo`):
+下面是 compaction 之后 Claude 看到的内容（内置的 demo 会话；运行 `tracepack demo`）：
 
 ```
 TracePack: the user's own words from before the compaction, verbatim. These sentences were picked
@@ -224,139 +166,107 @@ rows=200000 elapsed=29.3s p95_latency=530ms
 hot path: parse_rows 41% of time
 ```
 
-## How it works
+## 工作原理
 
-- **It reads, it doesn't record.** Claude Code already writes every message and tool output to
-  `~/.claude/projects/<project>/<session>.jsonl`. TracePack only reads that file.
-- **It knows what Claude can no longer see.**
-  - It pairs each tool call with its output by id.
-  - It recognises compactions, including the messages a compaction keeps verbatim.
-  - It searches only what dropped out of context, so it doesn't spend the budget repeating what
-    Claude already has.
-- **It ranks without a model.** It scores records against the question with BM25.
-- **It fills the budget with whole records, best first.**
-  - A tool output is labelled with the call that produced it.
-  - A call carries its short output.
-  - If a top record is too large for what's left, a labelled excerpt of its matching lines takes
-    its place; nothing is cut silently.
-  - The records are then shown in the order they happened.
-- **It masks secrets.** Strings that look like credentials (API keys, tokens, passwords) are masked
-  in everything it hands back.
-- **It picks your words without a model.** Each sentence you wrote is scored for facts: numbers,
-  dates, names, identifiers, first-person statements, preferences, plans, decisions, constraints such
-  as "never" or "must". Questions, thanks and pasted material score low. The sentences with the most
-  facts per token come back, so the one fact inside a long message can return without the rest.
-- **Two hooks, both cheap:**
-  - PreCompact notes your `/compact` instructions and prints the note-taking instructions. Claude
-    Code appends whatever a PreCompact hook prints to its own compaction prompt, after your
-    `/compact` instructions.
-  - SessionStart, right after a compaction, adds your words and the records back.
+- **它只读，不记录。** Claude Code 本来就会把每条消息和每个 tool output 写进 `~/.claude/projects/<project>/<session>.jsonl`。TracePack 只读这个文件。
+- **它知道 Claude 已经看不到什么。**
+  - 按 id 把每次 tool call 和它的 output 配对。
+  - 能识别 compaction，包括 compaction 时原样保留下来的那些消息。
+  - 只在已经掉出 context 的内容里搜索，所以不会把 budget 花在重复 Claude 已经有的东西上。
+- **排序不用模型。** 用 BM25 给 record 和问题打分。
+- **用完整的 record 填满 budget，最好的排在前面。**
+  - tool output 会标明是哪次 tool call 产生的。
+  - tool call 会带上它简短的 output。
+  - 如果排在前面的 record 太大、剩下的 budget 放不下，就换成它匹配行的带标签摘录；不会悄悄截掉任何东西。
+  - 最后按发生的先后顺序展示这些 record。
+- **它会 mask 掉密钥。** 交回的所有内容里，看起来像凭据的字符串（API key、token、密码）都会被遮掉。
+- **挑你的话也不用模型。** 你写的每个句子都按事实密度打分：数字、日期、名字、标识符、第一人称陈述、偏好、计划、决定，以及「never」「must」这类约束。提问、道谢和粘贴进来的材料得分低。每 token 事实最多的句子会回来，所以一条长消息里的那一个事实可以单独回来，不必带上其余部分。
+- **两个 hook，开销都很小：**
+  - PreCompact 记下你的 `/compact` 指令，并打印 note-taking 的说明。Claude Code 会把 PreCompact hook 打印的内容接在你的 `/compact` 指令后面，一起放进它自己的 compaction prompt。
+  - SessionStart 在 compaction 刚结束时，把你的话和 record 加回去。
 
-  There are no per-tool-call hooks, no daemon and no ports. Claude Code writes the compaction
-  summary only after these hooks run. So TracePack builds its query from your `/compact`
-  instructions and the latest work, and it pins the latest tool outputs first.
+  没有逐次 tool call 的 hook，没有 daemon，也不占端口。Claude Code 是在这些 hook 运行之后才写 compaction summary 的，所以 TracePack 根据你的 `/compact` 指令和最新的工作来构造 query，并把最新的 tool output 放在最前面。
 
-## When it helps, and when it doesn't
+## 什么时候有用，什么时候没用
 
-It helps with details you can't get back cheaply:
-- values printed once: random ids, timings, benchmark numbers;
-- output of slow, remote or side-effecting commands;
-- things you told Claude in chat;
-- earlier versions of a file that has since changed.
+它适合那些没法便宜地重新拿到的细节：
+- 只打印过一次的值：随机 id、耗时、benchmark 的数字；
+- 慢的、远程的或有副作用的命令的输出；
+- 你在聊天里告诉 Claude 的事情；
+- 后来已经改过的文件的旧版本。
 
-If a detail can be re-read cheaply (the file is still there), Claude re-reading it works just as
-well. Without TracePack, Claude can sometimes still dig a value out of its raw transcript file with
-grep, if the summary points it there. That costs an extra tool call over JSON lines.
+如果一个细节可以便宜地重读（文件还在），让 Claude 重读效果一样好。没有 TracePack 时，如果 summary 给了线索，Claude 有时也能用 grep 从原始 transcript 文件里挖出某个值，代价是在 JSON lines 上多一次 tool call。
 
-Our research measurements found that most details lost in compaction were cheap to re-read. On
-SWE-bench, adding the packet did not change the resolve rate. TracePack is for the cases where
-re-reading isn't an option; see [the research notes](docs/RESEARCH.md).
+我们的研究测量发现，compaction 中丢失的细节大多可以便宜地重读。在 SWE-bench 上，加上这份 packet 并没有改变 resolve rate。TracePack 是为没法重读的那些情况准备的；见 [research notes](docs/RESEARCH.md)。
 
-## Privacy and cost
+## 隐私与开销
 
-- **Local only.** It reads files on your machine and writes a few small JSON files to the plugin's
-  data folder (`~/.claude/plugins/data/tracepack…`). It makes no network calls, collects no
-  telemetry and calls no model.
-- **The research code goes online only when you run it.** This repository also holds the benchmark
-  and research code (`tracepack bench` and the `eval`, `pilot`, `profiler` and `baselines` folders).
-  `tracepack bench lme download` fetches LongMemEval from Hugging Face, and the benchmarks that need
-  a model call the endpoint you configure. The plugin's hooks and MCP server never run any of it.
-- **Cost.** The only cost is the tokens it adds: the notes in each compaction summary, and at most
-  ~2,000 tokens after each compaction. Nothing otherwise. Tool outputs from `recall` are sized by
-  the budget Claude asks for.
-- **Your files stay as they are.** It never writes into your repository or your settings.
-- **Transcripts expire.** They belong to Claude Code, which deletes them after `cleanupPeriodDays`
-  (30 days by default). TracePack can recall only what still exists.
+- **只在本地运行。** 它读取你机器上的文件，并在插件的 data 目录（`~/.claude/plugins/data/tracepack…`）里写几个小 JSON 文件。不发网络请求，不收集 telemetry，也不调用模型。
+- **研究代码只在你运行它时才联网。** 这个仓库还包含 benchmark 和研究代码（`tracepack bench` 以及 `eval`、`pilot`、`profiler`、`baselines` 几个目录）。`tracepack bench lme download` 会从 Hugging Face 下载 LongMemEval，需要模型的 benchmark 会调用你配置的 endpoint。插件的 hook 和 MCP server 从不运行这些代码。
+- **开销。** 唯一的开销是它加进来的 token：每次 compaction summary 里的 notes，以及每次 compaction 之后最多约 2,000 token。除此之外没有。`recall` 返回的 tool output 有多大，由 Claude 请求的 budget 决定。
+- **你的文件保持原样。** 它从不写入你的仓库或你的设置。
+- **transcript 会过期。** transcript 归 Claude Code 管，过了 `cleanupPeriodDays`（默认 30 天）就会被删除。TracePack 只能 recall 还存在的内容。
 
-## Settings
+## 设置
 
-The defaults need no setup. To change them, set environment variables, for example in
-`~/.claude/settings.json` under `"env"`:
+默认设置不需要任何配置。要修改的话，就设环境变量，例如写在 `~/.claude/settings.json` 的 `"env"` 下：
 
-| Variable | Default | Effect |
+| 变量 | 默认值 | 作用 |
 |---|---|---|
-| `TRACEPACK_NOTES` | `1` | Ask each compaction to keep dated notes. `0` turns this off. |
-| `TRACEPACK_INJECT_BUDGET` | `2000` | Tokens added after each compaction (8,000 characters at most). `0` turns this off. |
-| `TRACEPACK_USER_WORDS` | `1` | Include your own sentences in what is added. `0` adds only records. |
-| `TRACEPACK_RECALL_BUDGET` | `2000` | Default size of a `recall` answer. |
-| `TRACEPACK_MAX_MB` | `64` | For a very large transcript, read only its newest part. |
-| `TRACEPACK_REDACT` | `1` | Mask credential-like strings. `0` turns masking off. |
+| `TRACEPACK_NOTES` | `1` | 让每次 compaction 都保留带日期的 notes。`0` 关闭。 |
+| `TRACEPACK_INJECT_BUDGET` | `2000` | 每次 compaction 后加回的 token 数（最多 8,000 个字符）。`0` 关闭。 |
+| `TRACEPACK_USER_WORDS` | `1` | 加回的内容里包含你自己的句子。`0` 只加 record。 |
+| `TRACEPACK_RECALL_BUDGET` | `2000` | `recall` 回答的默认大小。 |
+| `TRACEPACK_MAX_MB` | `64` | transcript 非常大时，只读最新的那部分。 |
+| `TRACEPACK_REDACT` | `1` | mask 掉看起来像凭据的字符串。`0` 关闭。 |
 
-## Command line
+## 命令行
 
-The same engine is available outside Claude Code:
+同一个引擎在 Claude Code 之外也能用：
 
 ```bash
-uv tool install git+https://github.com/oklen/TracePack     # or: pipx install git+https://github.com/oklen/TracePack
-tracepack recall "exact error from the last pytest run"     # newest session of the current project
-tracepack recall "the port I gave you" --session <id or path>
-tracepack expand 417                                        # one record in full
+uv tool install git+https://github.com/oklen/TracePack     # 或者：pipx install git+https://github.com/oklen/TracePack
+tracepack recall "exact error from the last pytest run"     # 当前项目最新的会话
+tracepack recall "the port I gave you" --session <id 或路径>
+tracepack expand 417                                        # 一条 record 的全文
 tracepack status | last | sessions | demo | doctor
-tracepack bench codememo --data <CodeMemo folder>          # the recall benchmark (no model)
-tracepack bench lme run --arms tracepack,codex --out runs   # LongMemEval with compaction (needs a model)
+tracepack bench codememo --data <CodeMemo 目录>            # recall benchmark（不用模型）
+tracepack bench lme run --arms tracepack,codex --out runs   # 带 compaction 的 LongMemEval（需要模型）
 ```
 
-## Other agents (MCP)
+## 其他 agent（MCP）
 
-`tracepack mcp` is a standard stdio MCP server with no dependencies, exposing `recall`, `expand` and
-`status`. Any MCP client can use it:
+`tracepack mcp` 是一个标准的 stdio MCP server，没有依赖，提供 `recall`、`expand` 和 `status`。任何 MCP client 都可以用：
 
 ```json
 { "mcpServers": { "tracepack": { "command": "tracepack", "args": ["mcp"] } } }
 ```
 
-The Python API also reads pi sessions and OpenHands traces (`tracepack.pack`). It ships an
-OpenHands condenser and a LlamaIndex memory block; see [the library reference](docs/RESEARCH.md).
+Python API 也能读 pi 会话和 OpenHands trace（`tracepack.pack`），还附带一个 OpenHands condenser 和一个 LlamaIndex memory block；见 [library reference](docs/RESEARCH.md)。
 
 ## Benchmark
 
-[CodeMemo](https://github.com/laynepenney/codememo-benchmark) (MIT) has 158 questions over 66 Claude Code
-sessions from three software projects; 153 of them have evidence turns that can be located. Each
-project's sessions are joined in order into one long history, as if it were one session compacted many
-times. For every question and budget, a method hands back records, and we check two things:
-- **Answer's turn delivered:** at least one of the turns CodeMemo lists as the answer's evidence is among them.
-- **Exact value delivered** (in parentheses): the specific value in the short answer appears verbatim.
-  This counts only the questions whose short answer contains a number, version, path or identifier.
+[CodeMemo](https://github.com/laynepenney/codememo-benchmark)（MIT）在三个软件项目的 66 个 Claude Code 会话上出了 158 道题，其中 153 道的 evidence turn 可以定位。每个项目的会话按顺序拼成一段长历史，就像一个被 compact 了很多次的会话。对每道题和每个 budget，每种方法交回一些 record，我们检查两件事：
+- **召回答案所在的 turn：** CodeMemo 列为答案 evidence 的那几个 turn 里，至少有一个在交回的 record 中。
+- **召回确切的值**（括号里的数）：简短答案里的具体值原样出现。只统计简短答案里含数字、版本号、路径或标识符的题。
 
-All methods count tokens the same way (about 4 characters per token).
+所有方法用同样的方式计 token（约 4 个字符一个 token）。
 
-| Method | 1,000 tokens | 2,000 tokens | 4,000 tokens |
+| 方法 | 1,000 token | 2,000 token | 4,000 token |
 |---|---|---|---|
 | **TracePack** | 26.1% (37%) | 34.6% (47%) | 39.2% (56%) |
-| BM25 over messages | 29.4% (36%) | 34.0% (47%) | 40.5% (55%) |
-| grep over the transcript | 10.5% (12%) | 13.7% (17%) | 17.0% (21%) |
-| newest context only | 3.3% (8%) | 3.9% (12%) | 5.2% (16%) |
+| 基于消息的 BM25 | 29.4% (36%) | 34.0% (47%) | 40.5% (55%) |
+| grep transcript | 10.5% (12%) | 13.7% (17%) | 17.0% (21%) |
+| 只看最新 context | 3.3% (8%) | 3.9% (12%) | 5.2% (16%) |
 
-- **TracePack** is `recall` with its defaults: BM25 ranking, whole records in rank order, labels, a
-  call's short output folded in, and excerpts for top records that don't fit.
-- **BM25** is the same ranking without labels or folding: the strongest simple baseline.
-- **grep** reads the raw JSON lines that contain the question's two most specific words, in file
-  order, each cut to 2,000 characters.
-- **Newest context** is the last records that fit.
+- **TracePack** 是默认设置下的 `recall`：BM25 排序，按排名放入完整 record，带标签，把 tool call 的简短输出折进来，放不下的高排名 record 用摘录代替。
+- **BM25** 是同样的排序，但没有标签和折叠：最强的简单 baseline。
+- **grep** 读取包含问题里两个最具体的词的原始 JSON lines，按文件顺序，每行截到 2,000 个字符。
+- **只看最新 context** 是能放下的最后那些 record。
 
-By question category, at 2,000 tokens (answer's turn delivered):
+按题目类别，2,000 token（召回答案所在的 turn）：
 
-| Category | TracePack | BM25 | grep | newest context |
+| 类别 | TracePack | BM25 | grep | 只看最新 context |
 |---|---|---|---|---|
 | Factual | 37% | 37% | 17% | 6% |
 | Debug | 48% | 45% | 10% | 0% |
@@ -365,83 +275,69 @@ By question category, at 2,000 tokens (answer's turn delivered):
 | Convention | 35% | 35% | 20% | 5% |
 | Cross-session | 25% | 25% | 15% | 5% |
 
-The defaults (BM25 rather than BM25 plus a hashing embedding, no dependency closure, rank-order packing)
-were chosen on the odd-numbered questions and checked on the even-numbered ones, at 2,000 tokens:
+默认设置（用 BM25 而不是 BM25 加 hashing embedding、不做 dependency closure、按排名打包）是在奇数编号的题上选的，并在偶数编号的题上检查，都是 2,000 token：
 
-| Half | Method | Answer's turn | Exact value |
+| 哪一半 | 方法 | 答案所在的 turn | 确切的值 |
 |---|---|---|---|
-| odd (n=78) | tracepack | 34.6% | 51% |
-| odd (n=78) | bm25 | 33.3% | 53% |
-| even (n=75) | tracepack | 34.7% | 43% |
-| even (n=75) | bm25 | 34.7% | 40% |
+| 奇数（n=78） | tracepack | 34.6% | 51% |
+| 奇数（n=78） | bm25 | 33.3% | 53% |
+| 偶数（n=75） | tracepack | 34.7% | 43% |
+| 偶数（n=75） | bm25 | 34.7% | 40% |
 
-Two things this does not measure:
-- **Answer accuracy.** That also depends on the model reading the records.
-- **The automatic restore after `/compact`.** That uses the same packer with the latest tool outputs
-  pinned first. The LongMemEval result above measures the restore and the notes end to end.
+有两件事这里没有测：
+- **答题准确率。** 那还取决于读这些 record 的模型。
+- **`/compact` 之后的自动 restore。** 它用的是同一个 packer，只是把最新的 tool output 放在最前面。上面的 LongMemEval 结果端到端地测了 restore 和 notes。
 
-The earlier research measurements, including where dependency closure did and did not pay, are in
-[the research notes](docs/RESEARCH.md).
+早先的研究测量，包括 dependency closure 在哪里有用、在哪里没用，见 [research notes](docs/RESEARCH.md)。
 
-### LongMemEval with compaction
+### 带 compaction 的 LongMemEval
 
-`tracepack bench lme` is the harness behind the compaction results above. Each LongMemEval-S
-history (about 50 sessions, ~115k tokens) is streamed into a 32k context, compacted by the arm whenever
-it fills up, and the question is asked once at the end, with no tools; LongMemEval's official prompts
-grade the answer. The arms:
+`tracepack bench lme` 就是上面那些 compaction 结果背后的 harness。每条 LongMemEval-S 历史（约 50 个 session，~115k token）流式送进 32k 的 context，每次装满就用该 arm 的方法 compact，最后只问一次问题，不用工具；答案用 LongMemEval 官方的 prompt 评分。各 arm：
 
-- `tracepack`: the study's method (a note-taking summary plus the user's own messages, picked by content
-  and kept verbatim).
-- `codex`: Codex CLI's compaction, re-implemented from its source.
-- `notes`: the note-taking summary alone, with the same total budget.
-- `full`: no compaction.
-- `claude-code` and `claude-code+tracepack`: real Claude Code, without and with this plugin, plus two
-  ablations.
+- `tracepack`：研究里的方法（note-taking summary，加上按内容挑选、原样保留的用户消息）。
+- `codex`：Codex CLI 的 compaction，按它的源码重新实现。
+- `notes`：只用 note-taking summary，总 budget 相同。
+- `full`：不 compaction。
+- `claude-code` 和 `claude-code+tracepack`：真实的 Claude Code，分别不装和装这个插件，另有两个 ablation。
 
-Prompts, budgets and statistics are the study's, and the tests check the prompts byte for byte. Any
-OpenAI-compatible model works:
+prompt、budget 和统计方法都和研究里的一样，测试会逐字节检查 prompt。任何 OpenAI 兼容的模型都可以用：
 
 ```bash
 pip install tiktoken
 export TRACEPACK_LLM_BASE_URL=… TRACEPACK_LLM_API_KEY=… TRACEPACK_LLM_MODEL=… TRACEPACK_JUDGE_MODEL=…
-tracepack bench lme run --arms tracepack,codex --out runs/lme      # resumable; --dry-run makes no calls
+tracepack bench lme run --arms tracepack,codex --out runs/lme      # 可断点续跑；--dry-run 不发出任何调用
 tracepack bench lme report --out runs/lme
 ```
 
-Roughly 150k input tokens per question per arm. Setup, the Claude Code arms and the output format are
-described in [docs/BENCH_LME.md](docs/BENCH_LME.md).
+每道题、每个 arm 大约消耗 150k 输入 token。环境设置、Claude Code 那两个 arm 和输出格式见 [docs/BENCH_LME.md](docs/BENCH_LME.md)。
 
 ## Troubleshooting
 
-- **Run `/tracepack:status` or `tracepack doctor`.** The doctor checks Python, finds your
-  transcripts, and runs the whole path on a built-in example session.
-- **`python3: command not found`:** install Python 3.9 or newer.
-- **Nothing restored after `/compact`:** either nothing before the compaction qualified (no tool
-  output and no sentence of yours with a fact), or `TRACEPACK_INJECT_BUDGET` is `0`.
-- **The note-taking text shows up after a manual `/compact`:** Claude Code prints every PreCompact
-  hook's output in the `/compact` result. `TRACEPACK_NOTES=0` turns the notes off.
-- **Hook errors:** they never interrupt Claude. They are logged to `hook_errors.log` in the data
-  folder, and `tracepack doctor` reports them.
+- **运行 `/tracepack:status` 或 `tracepack doctor`。** doctor 会检查 Python、找到你的 transcript，并用一个内置的示例会话把整条路径跑一遍。
+- **`python3: command not found`：** 安装 Python 3.9+。
+- **`/compact` 之后什么都没 restore：** 要么 compaction 之前没有符合条件的内容（没有 tool output，你也没说过含事实的句子），要么 `TRACEPACK_INJECT_BUDGET` 是 `0`。
+- **手动 `/compact` 之后出现了 note-taking 的说明文字：** Claude Code 会把每个 PreCompact hook 的输出打印在 `/compact` 的结果里。`TRACEPACK_NOTES=0` 可以关掉 notes。
+- **hook 报错：** 它们从不打断 Claude。错误会记到 data 目录下的 `hook_errors.log`，`tracepack doctor` 也会报出来。
 
-## Uninstall
+## 卸载
 
 ```
 /plugin uninstall tracepack@tracepack
 /plugin marketplace remove tracepack
 ```
 
-Uninstalling removes the plugin's data folder. Your transcripts are not touched.
+卸载会删除插件的 data 目录。你的 transcript 不受影响。
 
-## Development
+## 开发
 
 ```bash
-python3 tracepack/tests/run_all.py                 # 310 tests, contract by contract
-claude plugin validate . --strict                  # manifest, marketplace, hooks, MCP config
-claude --plugin-dir .                              # try the working copy in Claude Code
+python3 tracepack/tests/run_all.py                 # 310 个测试，按 contract 逐项检查
+claude plugin validate . --strict                  # manifest、marketplace、hook、MCP 配置
+claude --plugin-dir .                              # 在 Claude Code 里试用工作副本
 ```
 
-Releases are listed in the [CHANGELOG](CHANGELOG.md).
+版本记录见 [CHANGELOG](CHANGELOG.md)。
 
-## License
+## 许可
 
-MIT © 2026 Zefeng Cai — see [LICENSE](LICENSE).
+MIT © 2026 Zefeng Cai，见 [LICENSE](LICENSE)。

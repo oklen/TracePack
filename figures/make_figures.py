@@ -1,6 +1,7 @@
-"""Draw the README results figure, assets/results.png and assets/results-dark.png.
+"""Draw the README results figure, assets/results.png and assets/results-dark.png, and the Chinese copies
+assets/results-zh.png and assets/results-zh-dark.png used by the Chinese README.
 
-    python3 figures/make_figures.py
+    python3 figures/make_figures.py [--lang en|zh]     # both languages by default
 
 The numbers are typed in below, each with its source; they are not recomputed here.
 - Chat memory: the pre-registered 10-08 run of `tracepack bench lme` with real Claude Code 2.1.294
@@ -16,7 +17,8 @@ import os
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
-from _style import BLUE, GREY, save, use
+import _style as S
+from _style import BLUE, GREY, L, save, use
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
 
@@ -37,6 +39,21 @@ CODEMEMO = [("newest context only", 3.9), ("grep the transcript", 13.7),
 # SWE-bench Verified at 32k: OpenHands' own compaction vs. the same plus forgotten file views put back
 SWE = [("hit the step limit", 19.2, 8.4, "−10.8 pts\n[−18.6, −3.0]"),
        ("solved", 46.7, 50.0, "+3.3 pts, tied\n[−1.4, +10.3]")]
+
+
+ZH = {  # labels in the Chinese copy
+    "all questions": "全部题目", "facts you\nstated": "你说过的\n事实", "your\npreferences": "你的\n偏好",
+    "what Claude\ntold you": "Claude\n告诉你的", "updated\nfacts": "更新过的\n事实", "across\nsessions": "跨会话",
+    "time and\norder": "时间与\n顺序",
+    "newest context only": "只看最新 context", "grep the transcript": "grep transcript",
+    "hit the step limit": "撞 step limit", "solved": "resolved",
+    "−10.8 pts\n[−18.6, −3.0]": "−10.8 pp\n[−18.6, −3.0]",
+    "+3.3 pts, tied\n[−1.4, +10.3]": "+3.3 pp，持平\n[−1.4, +10.3]",
+}
+
+
+def tr(label):
+    return L(label, ZH.get(label, label))
 
 
 def pct(c, n):
@@ -61,9 +78,9 @@ def draw(theme):
     ax.text(0 - w / 2, a0 + 2, "%.1f%%" % a0, ha="center", va="bottom", fontsize=9, color=t["fg"])
     ax.text(0 + w / 2, b0 + 2, "%.1f%%" % b0, ha="center", va="bottom", fontsize=9, color=t["fg"])
     ax.hlines(100 * LME_CODEX, -0.5, 0.5, colors=t["fg"], linestyles=(0, (3, 2)), linewidth=1.3,
-              label="Codex's compaction, all questions: %.1f%%" % (100 * LME_CODEX))
+              label=L("Codex's compaction, all questions: %.1f%%", "Codex compaction，全部题目：%.1f%%") % (100 * LME_CODEX))
     ax.set_xticks(list(xs))
-    ax.set_xticklabels(["%s\n%.0f → %.0f" % (lab, pct(cc, n), pct(tp, n)) for lab, n, cc, tp in LME])
+    ax.set_xticklabels(["%s\n%.0f → %.0f" % (tr(lab), pct(cc, n), pct(tp, n)) for lab, n, cc, tp in LME])
     ax.set_xlim(-0.6, len(LME) - 0.4)
     ax.set_ylim(0, 108)
     ax.set_yticks([0, 25, 50, 75, 100])
@@ -74,8 +91,10 @@ def draw(theme):
     order = [ls.index("Claude Code"), ls.index("Claude Code + TracePack"), 0]
     ax.legend([hs[j] for j in order], [ls[j] for j in order], loc="upper left", bbox_to_anchor=(0.0, 1.04),
               ncol=3, handlelength=1.6, borderaxespad=0, columnspacing=1.4)
-    ax.set_title("What you said · LongMemEval-S chat histories, compacted at 32k\n"
-                 "real Claude Code, same model in both arms; accuracy on 480 questions",
+    ax.set_title(L("What you said · LongMemEval-S chat histories, compacted at 32k\n"
+                   "real Claude Code, same model in both arms; accuracy on 480 questions",
+                   "What you said · LongMemEval-S 对话历史，到 32k 就 /compact\n"
+                   "真实 Claude Code，两边同一个模型；480 题准确率"),
                  loc="left", fontsize=11, pad=24)
 
     # -- B: coding sessions ----------------------------------------------------------------------
@@ -88,26 +107,30 @@ def draw(theme):
             ax.barh(i, v, 0.56, color=BLUE if lab == "TracePack" else GREY, **gap)
         ax.text(v + 1.0, i, "%.1f%%" % v, va="center", fontsize=9, color=t["fg"])
     ax.set_yticks(range(len(CODEMEMO)))
-    ax.set_yticklabels([lab + (" (reference)" if lab == "BM25" else "") for lab, _ in CODEMEMO])
+    ax.set_yticklabels([tr(lab) + (L(" (reference)", "（reference）") if lab == "BM25" else "") for lab, _ in CODEMEMO])
     ax.set_xlim(0, 45)
     ax.set_xticks([0, 10, 20, 30, 40])
     ax.set_xticklabels(["0", "10", "20", "30", "40%"])
     ax.xaxis.grid(True, linewidth=0.8)
     ax.set_axisbelow(True)
-    ax.set_title("Code · what the tools printed\nCodeMemo: 66 real Claude Code coding sessions;\n"
-                 "answer's turn found within 2,000 tokens", loc="left", fontsize=11)
+    ax.set_title(L("Code · what the tools printed\nCodeMemo: 66 real Claude Code coding sessions;\n"
+                   "answer's turn found within 2,000 tokens",
+                   "Code · 工具打印过的内容\nCodeMemo：66 个真实的 Claude Code coding session；\n"
+                   "2,000 token 内召回答案所在的 turn"), loc="left", fontsize=11)
 
     # -- C: coding agent -------------------------------------------------------------------------
     ax = fig.add_subplot(gs[1, 1])
     w = 0.34
     for i, (lab, s, k, delta) in enumerate(SWE):
-        ax.bar(i - w / 2, s, w, color=GREY, **gap, label="OpenHands' compaction" if i == 0 else None)
-        ax.bar(i + w / 2, k, w, color=BLUE, **gap, label="+ forgotten file views put back" if i == 0 else None)
+        ax.bar(i - w / 2, s, w, color=GREY, **gap, label=L("OpenHands' compaction", "OpenHands 自带的 compaction")
+               if i == 0 else None)
+        ax.bar(i + w / 2, k, w, color=BLUE, **gap, label=L("+ forgotten file views put back", "+ 放回被丢掉的 file view")
+               if i == 0 else None)
         ax.text(i - w / 2, s + 1.2, "%.1f%%" % s, ha="center", va="bottom", fontsize=9, color=t["fg"])
         ax.text(i + w / 2, k + 1.2, "%.1f%%" % k, ha="center", va="bottom", fontsize=9, color=t["fg"])
-        ax.text(i, max(s, k) + 9.5, delta, ha="center", va="bottom", fontsize=9, color=t["muted"], linespacing=1.25)
+        ax.text(i, max(s, k) + 9.5, tr(delta), ha="center", va="bottom", fontsize=9, color=t["muted"], linespacing=1.25)
     ax.set_xticks([0, 1])
-    ax.set_xticklabels([lab for lab, _, _, _ in SWE])
+    ax.set_xticklabels([tr(lab) for lab, _, _, _ in SWE])
     ax.set_xlim(-0.6, 1.6)
     ax.set_ylim(0, 96)
     ax.set_yticks([0, 20, 40, 60])
@@ -115,12 +138,16 @@ def draw(theme):
     ax.yaxis.grid(True, linewidth=0.8)
     ax.set_axisbelow(True)
     ax.legend(loc="upper left", bbox_to_anchor=(0.0, 1.0), handlelength=1.2, borderaxespad=0, fontsize=8.5)
-    ax.set_title("Code · a coding agent, end to end\nSWE-bench Verified at 32k, 242 checkpoints;\n"
-                 "research harness, same idea, not the plugin", loc="left", fontsize=11)
+    ax.set_title(L("Code · a coding agent, end to end\nSWE-bench Verified at 32k, 242 checkpoints;\n"
+                   "research harness, same idea, not the plugin",
+                   "Code · coding agent 端到端\nSWE-bench Verified，32k，242 个 checkpoint；\n"
+                   "研究用 harness，同一思路，不是插件本身"), loc="left", fontsize=11)
 
     save(fig, OUT, "results", theme)
 
 
 if __name__ == "__main__":
-    for theme in ("light", "dark"):
-        draw(theme)
+    for lang in S.langs():
+        S.set_lang(lang)
+        for theme in ("light", "dark"):
+            draw(theme)
